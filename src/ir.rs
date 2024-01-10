@@ -1,12 +1,7 @@
-use std::collections::HashMap;
-use std::fmt::{Debug};
-
-#[derive(Default, Debug)]
-pub struct Vm {
-    pub strings: Vec<String>,
-    pub string_cache: HashMap<String, StrId>,
-    pub tables: HashMap<StrId, Relation>,
-}
+use std::borrow::Cow;
+use std::fmt::Debug;
+use std::ops::Range;
+use crate::vm::{RowsIter, StrId};
 
 #[derive(Clone, Debug)]
 pub struct Relation {
@@ -15,11 +10,11 @@ pub struct Relation {
     pub rows: Vec<Row>
 }
 
+// TODO: it would be very nice if these didn't need to allocate
 #[derive(Clone, Debug, Default)]
 pub struct Row {
     pub values: Vec<Value>
 }
-
 #[derive(Clone, Debug, Default)]
 pub struct Schema {
     pub names: Vec<StrId>
@@ -29,51 +24,40 @@ pub struct Schema {
 pub enum Value {
     Num(f64),
     Str(StrId),
+    Bool(bool),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct StrId(pub usize);
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct FieldId(pub usize);
 
 #[derive(Debug)]
-pub enum Expr {
+pub enum IrExpr {
     GetNamedTable(StrId),
-    Project(Box<Expr>, Vec<FieldId>)
+    Projection(Box<IrExpr>, Vec<FieldId>)
 }
 
 #[derive(Debug)]
-pub enum AstExpr {
-    GetNamedTable(String),
+pub enum AstExpr<'src> {
+    GetNamedTable(&'src str),
+    /// Filter and reorder fields
     Projection {
-        input: Box<AstExpr>,
+        input: Box<Loc<AstExpr<'src>>>,
         prev: Schema,
-        fields: Vec<String>,
+        fields: Vec<&'src str>,
     }
 }
 
-pub enum IterRows<'a> {
-    Borrowed(&'a Relation, usize),
-    FilterMap(Box<IterRows<'a>>, Box<dyn FnMut(Row) -> Option<Row>>)
+/// Remember a span in the src for error messages.
+pub type Loc<T> = (T, Range<usize>);  // TODO: range not actually used yet
+
+impl Schema {
+    pub fn get_index(&self, id: StrId) -> Option<FieldId> {
+        self.names.iter().position(|&check| check == id).map(FieldId)
+    }
 }
 
-impl<'a> Iterator for IterRows<'a> {
-    type Item = Row;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            IterRows::Borrowed(rows, index) => {
-                *index += 1;
-                rows.rows.get(*index - 1).cloned()  // TODO: sad to realloc the vec if just want to filter
-            }
-            IterRows::FilterMap(prev,f) => {
-                for r in prev {
-                    if let Some(row) = f(r) {
-                        return Some(row);
-                    }
-                }
-                return None;
-            }
-        }
+impl Relation {
+    pub fn iter(&self) -> RowsIter {
+        RowsIter::new(self.rows.iter().cloned(), Cow::Borrowed(&self.schema))
     }
 }

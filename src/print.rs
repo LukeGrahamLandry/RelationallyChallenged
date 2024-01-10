@@ -1,9 +1,9 @@
-use crate::ir::{Relation, Row, Schema, StrId, Value, Vm};
-use crate::vm::RowsIter;
+use crate::ir::{Relation, Row, Schema, Value};
+use crate::vm::{RowsIter, StrId, Vm};
 
 impl Vm {
     pub fn print_table(&self, e: &Relation) -> String {
-        self.print_rows_iter(RowsIter(Box::new(e.rows.iter().cloned()), e.schema.clone()), e.name)
+        self.print_rows_iter(e.iter(), e.name)
     }
 
     pub fn print_rows_iter(&self, e: RowsIter, name: StrId) -> String {
@@ -27,22 +27,7 @@ impl Vm {
         match e {
             Value::Num(n) => format!("\"{n}\""),
             &Value::Str(s) => self.get_str(s).to_string(),
-        }
-    }
-
-    pub fn get_str(&self, e: StrId) -> &str {
-        &self.strings[e.0]
-    }
-
-    pub fn add_str(&mut self, e: &str) -> StrId {
-        match self.string_cache.get(e) {
-            None => {
-                let id = StrId(self.strings.len());
-                self.string_cache.insert(e.to_string(), id);
-                self.strings.push(e.to_string());
-                id
-            }
-            Some(&id) => id,
+            Value::Bool(b) => format!("\"{b}\""),
         }
     }
 }
