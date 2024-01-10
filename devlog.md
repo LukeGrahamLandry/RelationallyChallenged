@@ -67,8 +67,8 @@ hourglass, join: concat a struct with another that you looked up in a different 
                  like zip two tables but then filter out all but one.   
 union and intersection: like sets
 
-relation = table = list of tupples 
-schema = names for fields of the tupple
+relation = table = list of tuples 
+schema = names for fields of the tuple
 
 I feel like im missing something since they have such fancy words for everything but it 
 seems like just tiny functional language. 

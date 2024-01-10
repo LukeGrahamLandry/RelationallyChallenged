@@ -1,3 +1,5 @@
+//! Convert a string of source code into a stream of tokens.
+
 use crate::lex::TokenType::*;
 use std::iter::Peekable;
 use std::num::ParseFloatError;

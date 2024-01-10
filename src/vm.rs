@@ -1,7 +1,7 @@
+use crate::ir::{AstExpr, AstValue, IrExpr, Loc, Relation, Row, Schema, Value};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::ir::{AstExpr, IrExpr, Loc, Relation, Row, Schema};
 
 // TODO: you can never remove strings from the cache to reclaim memory because someone might have a StrId referencing it.
 #[derive(Default, Debug, Clone)]
@@ -12,7 +12,7 @@ pub struct Vm {
 }
 
 // TODO: maybe row should also be a cow
-pub struct RowsIter<'a>(pub Box<dyn Iterator<Item=Row> + 'a>, pub Cow<'a, Schema>);
+pub struct RowsIter<'a>(pub Box<dyn Iterator<Item = Row> + 'a>, pub Cow<'a, Schema>);
 
 impl Vm {
     // TODO: if i was feeling fancy, the Vm could have a pool of row vecs and impl drop to return them
@@ -28,9 +28,13 @@ impl Vm {
                 let schema = Schema {
                     names: fields.iter().map(|i| prev.1.names[i.0]).collect(),
                 };
-                RowsIter::new(prev.0.map(|row| Row {  // TODO: could filter and reorder the existing vec?
-                    values: fields.iter().map(|i| row.values[i.0]).collect(),
-                }), Cow::Owned(schema))
+                RowsIter::new(
+                    prev.0.map(|row| Row {
+                        // TODO: could filter and reorder the existing vec?
+                        values: fields.iter().map(|i| row.values[i.0]).collect(),
+                    }),
+                    Cow::Owned(schema),
+                )
             }
         })
     }
@@ -38,20 +42,65 @@ impl Vm {
     // TODO: result instead of assert/unwrap
     // TODO: infer type so you dont have to specify schema on projection
     /// Preprocess and type check an ast.
-    /// The result is only valid if eval-ed on THIS vm instance.
-    pub fn compile(&mut self, (expr, _): Loc<AstExpr>) -> IrExpr {
+    /// The result is only valid if eval-ed on THIS vm instance. TODO: enforce with lifetime
+    /// Note: CreateNamedTable runs NOW, not during eval.
+    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> IrExpr {
         match expr {
             AstExpr::GetNamedTable(name) => IrExpr::GetNamedTable(self.intern(name)),
-            AstExpr::Projection { input, prev, fields } => {
+            AstExpr::Projection {
+                input,
+                prev,
+                fields,
+            } => {
                 assert!(prev.names.len() >= fields.len());
-                let input = self.compile(*input);
-                let fields = fields.into_iter().map(|name| {
-                    let id = self.intern(name);
-                    prev.get_index(id).expect("Field lookup")
-                }).collect();
+                let input = self.compile_impure(*input);
+                let fields = fields
+                    .into_iter()
+                    .map(|name| {
+                        let id = self.intern(name);
+                        prev.get_index(id).expect("Field lookup")
+                    })
+                    .collect();
                 IrExpr::Projection(Box::new(input), fields)
             }
+            // TODO: untested
+            AstExpr::CreateNamedTable {
+                name,
+                headers,
+                data,
+            } => {
+                let name = self.intern(name);
+                let schema = Schema {
+                    names: headers.iter().map(|n| self.intern(n)).collect(),
+                };
+                let table = Relation {
+                    rows: self.load_table(data, &schema),
+                    name,
+                    schema,
+                };
+                self.tables.insert(name, table);
+                IrExpr::GetNamedTable(name)
+            }
         }
+    }
+
+    // TODO: schema type checking
+    fn load_table(&mut self, data: Vec<Vec<AstValue>>, schema: &Schema) -> Vec<Row> {
+        data.into_iter()
+            .map(|row| {
+                assert_eq!(schema.names.len(), row.len()); // TODO: result
+                Row {
+                    values: row
+                        .into_iter()
+                        .map(|value| match value {
+                            AstValue::Num(n) => Value::Num(n),
+                            AstValue::Str(s) => Value::Str(self.intern(s)),
+                            AstValue::Bool(b) => Value::Bool(b),
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
     }
 
     pub fn get_str(&self, e: StrId) -> &str {
@@ -76,7 +125,7 @@ impl Vm {
 pub struct StrId(usize);
 
 impl<'a> RowsIter<'a> {
-    pub fn new(f: impl Iterator<Item=Row> + 'a, schema: Cow<'a, Schema>) -> Self {
+    pub fn new(f: impl Iterator<Item = Row> + 'a, schema: Cow<'a, Schema>) -> Self {
         Self(Box::new(f), schema)
     }
 
