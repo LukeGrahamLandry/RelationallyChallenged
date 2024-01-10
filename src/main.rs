@@ -1,9 +1,5 @@
-use crate::ir::{AstExpr, Relation, Row, Schema, Value};
-use crate::vm::Vm;
-
-mod ir;
-mod vm;
-mod print;
+use relations::ir::{AstExpr, Relation, Row, Schema, Value};
+use relations::vm::Vm;
 
 fn main() {
     let mut vm = Vm::default();

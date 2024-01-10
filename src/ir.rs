@@ -48,7 +48,7 @@ pub enum AstExpr<'src> {
 }
 
 /// Remember a span in the src for error messages.
-pub type Loc<T> = (T, Range<usize>);  // TODO: range not actually used yet
+pub type Loc<T> = (T, Range<usize>);  // TODO: range not actually used yet.
 
 impl Schema {
     pub fn get_index(&self, id: StrId) -> Option<FieldId> {

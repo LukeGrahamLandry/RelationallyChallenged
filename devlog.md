@@ -6,12 +6,24 @@
 - filter
 - union
 - intersection
+- set difference 
 - join
 - web ui
 - cli 
 - tests
 - error handing
 - pretty print ast
+
+## lex it bb (Jan 10)
+
+I could find some lexer generator thingy, but its just code so lets see how tedious it is. 
+
+At first, I was just re-slicing the string as you go to chop off the first character. 
+but you want to remember where the token started, so maybe it's better to track an index. 
+
+Might as well layout some scaffolding for testing. 
+I like the idea of programmatically generated relations (like say numbers and their squares)
+where I can write normal programs to easily check the query results. 
 
 ## Start Vm Structure (Jan 9)
 
