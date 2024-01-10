@@ -1,7 +1,7 @@
 
 ## TODO
 
-- lex & parse to ast
+- parse to ast
 - value expressions
 - filter
 - union
@@ -13,6 +13,7 @@
 - tests
 - error handing
 - pretty print ast
+- inline relations 
 
 ## lex it bb (Jan 10)
 
@@ -20,10 +21,21 @@ I could find some lexer generator thingy, but its just code so lets see how tedi
 
 At first, I was just re-slicing the string as you go to chop off the first character. 
 but you want to remember where the token started, so maybe it's better to track an index. 
+annoying that you need to put the lifetime everywhere because it infers lifetime of self 
+which isnt quite what i want, its supposed to be tied to the src string. 
 
 Might as well layout some scaffolding for testing. 
 I like the idea of programmatically generated relations (like say numbers and their squares)
 where I can write normal programs to easily check the query results. 
+
+Trivial lexer sanity test of just making sure my token spans don't lose any characters and don't overlap. 
+Successfully caught mistake with numbers dropping the next char because I popped instead of peeked. 
+
+I'm not sure what the syntax is actually supposed to be. 
+Relax uses `Name = { fields\n rows }` and assignment example uses `Name (fields) = { rows }` 
+which is nice cause the parser doesn't have to care about whitespace. 
+So if I want to support the former I need to add a token for linebreaks with is annoying because you 
+probably want to ignore it in every other context. 
 
 ## Start Vm Structure (Jan 9)
 
