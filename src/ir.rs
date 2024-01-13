@@ -100,6 +100,7 @@ pub enum BinOp {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TableBinOp {
     Union,
+    Intersection,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

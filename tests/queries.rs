@@ -35,11 +35,14 @@ Courses = {CourseID, CourseName, Professor
 }"#;
 
 // TODO: not on ^. its just an example from bright space
+// TODO: supporting this needs some concept of namespaces across tables
 const STUDENT_QUERY: &str = r#"
 π name, title, mark (
       (Student ⨝Student.id=Takes.sidTakes)
       ⨝ cid=Course.id Course
 )"#;
+
+const SELECT_FOUR: &str = "pi Square (select Name='Four' (pi Square, Name (Numbers)))";
 
 // Use with make_numbers()
 const FOUR_AND_FIVE_QUERY: &str = r#"
@@ -58,10 +61,7 @@ union
 
 #[test]
 fn select_pi() {
-    let four_squared = run_query(&format!(
-        "{}\n pi Square (select Name='Four' (pi Square, Name (Numbers)))",
-        make_numbers()
-    ));
+    let four_squared = run_query(&format!("{}\n {SELECT_FOUR}", make_numbers()));
     assert_eq!(four_squared, vec![vec![Value::Num(16.0)]]);
 }
 

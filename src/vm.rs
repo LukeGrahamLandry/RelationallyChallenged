@@ -55,30 +55,19 @@ impl Vm {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
                 match op {
-                    TableBinOp::Union => {
-                        // Super ugly because I only want to drain lhs&rhs after the caller tries to poll
-                        // the iterator. Which is kinda pointless but I like the idea of eval being as lazy as possible.
-
-                        // This has to be an option because the iter is an FnMut so you can't consume lhs&rhs directly
-                        // because the compiler doesn't trust that I'll only do it once.
-                        // When you call take on the Option<FnOnce>, it replaces it with none so it doesn't actually move the variable out of the closure.
-                        let mut lazy = Some(move || {
-                            // TODO: sad day that i have to allocate the whole thing but idk how else you'd do this
-                            let all: HashSet<_> = lhs.0.chain(rhs.0).collect();
-                            all.into_iter()
-                        });
-
-                        // The first time this is called, compute the union and save that iterator.
-                        // Future calls will just poll from it.
-                        let mut cached = None;
-                        RowsIter::new(from_fn(move || match &mut cached {
-                            None => {
-                                cached = Some(lazy.take().unwrap()());
-                                cached.as_mut().unwrap().next()
-                            }
-                            Some(iter) => iter.next(),
-                        }))
-                    }
+                    TableBinOp::Union => RowsIter::new(lazy_init(move || {
+                        // TODO: sad day that i have to allocate the whole thing but idk how else you'd do this
+                        let all: HashSet<_> = lhs.0.chain(rhs.0).collect();
+                        Box::new(all.into_iter())
+                    })),
+                    TableBinOp::Intersection => RowsIter::new(lazy_init(move || {
+                        // TODO: use size_hint and pick the smaller one to be fully allocated instead of arbitrarily left
+                        let left: HashSet<_> = lhs.0.collect();
+                        if left.is_empty() {
+                            return Box::new(left.into_iter());
+                        }
+                        Box::new(rhs.0.filter(move |row| left.contains(&row)))
+                    })),
                 }
             }
         })
@@ -137,6 +126,7 @@ impl Vm {
                 data,
             } => {
                 let name = self.intern(name);
+                // TODO: require no dups?
                 let rows = self.load_table(data, headers.len());
                 // TODO: err if no rows
                 let schema = Schema {
@@ -267,4 +257,27 @@ impl<'a> RowsIter<'a> {
             rows: self.0.collect(),
         }
     }
+}
+
+fn lazy_init<'a, T: 'a>(
+    f: impl FnOnce() -> Box<dyn Iterator<Item = T> + 'a> + 'a,
+) -> impl Iterator<Item = T> + 'a {
+    // Super ugly because I only want to drain lhs&rhs after the caller tries to poll
+    // the iterator. Which is kinda pointless but I like the idea of eval being as lazy as possible.
+
+    // This has to be an option because the iter is an FnMut so you can't consume lhs&rhs directly
+    // because the compiler doesn't trust that I'll only do it once.
+    // When you call take on the Option<FnOnce>, it replaces it with none so it doesn't actually move the variable out of the closure.
+    let mut lazy = Some(f);
+
+    // The first time this is called, compute the union and save that iterator.
+    // Future calls will just poll from it.
+    let mut cached = None;
+    from_fn(move || match &mut cached {
+        None => {
+            cached = Some(lazy.take().unwrap()());
+            cached.as_mut().unwrap().next()
+        }
+        Some(iter) => iter.next(),
+    })
 }
