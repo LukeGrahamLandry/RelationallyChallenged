@@ -72,7 +72,6 @@ fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
 #[test]
 fn parse() {
     let mut vm = Vm::default();
-    let name = vm.intern("Result");
     let s = make_numbers();
     let mut parse = Parser::new(Lexer::new(&s));
     let q = vm.compile_impure(parse.next().unwrap()).0;
@@ -80,11 +79,13 @@ fn parse() {
     let mut parse = Parser::new(Lexer::new("pi Square, Name (Numbers)"));
     let q = vm.compile_impure(parse.next().unwrap()).0;
     let res = vm.eval(&q);
-    println!("{}", vm.print_rows_iter(res.unwrap(), name));
-    let mut parse = Parser::new(Lexer::new("select Name='Four' (pi Square, Name (Numbers))"));
+    println!("{}", vm.print_rows_iter(res.unwrap()));
+    let mut parse = Parser::new(Lexer::new(
+        "pi Square (select Name='Four' (pi Square, Name (Numbers)))",
+    ));
     let a = parse.next().unwrap();
     println!("{a:?}");
     let q = vm.compile_impure(a).0;
     let res = vm.eval(&q);
-    println!("{}", vm.print_rows_iter(res.unwrap(), name));
+    println!("{}", vm.print_rows_iter(res.unwrap()));
 }

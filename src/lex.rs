@@ -11,6 +11,7 @@ use std::str::Chars;
 #[derive(Debug, Clone)]
 pub struct Token<'a>(pub TokenType<'a>, pub Range<usize>);
 
+// TODO: true/false
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType<'a> {
     Ident(&'a str),

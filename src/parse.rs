@@ -73,6 +73,7 @@ impl<'src> Parser<'src> {
         }
     }
 
+    // TODO: precedence
     fn pred(&mut self) -> Res<'src, AstPred<'src>> {
         let left = self.pred_primary()?;
         match self.lex.nth(0)?.0 {

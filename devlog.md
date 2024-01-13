@@ -1,9 +1,7 @@
 
 ## TODO
 
-- parse to ast
-- value expressions
-- filter
+- (gt, lt, and, or, not) in filter predicate 
 - union
 - intersection
 - set difference 
@@ -15,12 +13,34 @@
 - pretty print ast
 - inline relations
 
-## more parsing (Jan 13)
+## more parsing and filter (Jan 13)
 
 often need to parse any number of comma seperated things (rows, headers, pi args). 
 
 for parsing projection, you really dont want to deal with knowing the schema of the input table so 
 its a good time to move that to the compile step. 
+
+now that im doing select i realize i probably should have called things that evaluate to rows statements instead of expressions.
+
+want to track the type of each column so can check that usage in expressions is valid. 
+like you probably shouldn't be allowed to check if a string is larger than a number or whatever.
+Its a bit annoying to decide what the input types for table literals are. 
+I guess just base it on the types of the first column. 
+TODO: i think relax has optional type annotations on table headers. 
+TODO: check that all rows in the table match types of the first. 
+TODO: do i want implicit nulls if trailing entries are missing from some rows? 
+
+Similar structure for predicates as for relation expressions. Parse to an ast of strings. 
+Then compile that into a simpler ast while checking that the types work out. Like the filter 
+expression needs to return a bool. Then for exec, expand it into closures that map a row to a Value. 
+And then filter is just Iterator::filter using that closure on each row. 
+Nice that it doesn't need to allocate a new row. 
+
+TODO: do you need to be able to eval predicate with multiple input rows? 
+I guess conceptually join fuses them into one first and then filters that, so it's fine 
+but the strat has gotta be to optimise that so you don't actually walk the whole other list for each item.
+Maybe that's what indexes are which sounds like too much of a pain since this will presumably only 
+be tested on tiny examples. 
 
 ## parse it bb (Jan 12)
 

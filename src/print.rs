@@ -3,19 +3,24 @@ use crate::vm::{RowsIter, StrId, Vm};
 
 impl Vm {
     pub fn print_table(&self, e: &Relation) -> String {
-        self.print_rows_iter(e.iter(), e.name)
+        let rows = e
+            .rows
+            .iter()
+            .map(|r| self.print_row(&r))
+            .fold(String::new(), |a, b| a + &b + "\n");
+        format!(
+            "{0} = {{ \n{1}\n{2} }}",
+            self.get_str(e.name),
+            self.print_schema(&e.schema),
+            rows
+        )
     }
 
-    pub fn print_rows_iter(&self, e: RowsIter, name: StrId) -> String {
+    pub fn print_rows_iter(&self, e: RowsIter) -> String {
         let rows =
             e.0.map(|r| self.print_row(&r))
                 .fold(String::new(), |a, b| a + &b + "\n");
-        format!(
-            "{0} = {{ \n{1}\n{2} }}",
-            self.get_str(name),
-            self.print_schema(&e.1),
-            rows
-        )
+        format!("Relation {{\n{}}}", rows)
     }
 
     pub fn print_schema(&self, e: &Schema) -> String {

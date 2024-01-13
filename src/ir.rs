@@ -17,8 +17,8 @@ pub struct Row {
 }
 #[derive(Clone, Debug, Default)]
 pub struct Schema {
-    // TODO: types?
     pub names: Vec<StrId>,
+    pub types: Vec<VType>,
 }
 
 // TODO: floats mean you can't hash
@@ -36,6 +36,7 @@ pub struct FieldId(pub usize);
 pub enum IrExpr {
     GetNamedTable(StrId),
     TakeFields(Box<IrExpr>, Vec<FieldId>),
+    Filter(Box<IrExpr>, IrPred),
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +49,7 @@ pub enum IrPred {
 #[derive(Debug)]
 pub enum AstExpr<'src> {
     // TODO: this has side effects when compiled not when evaluated which probably the wrong choice.
+    // TODO: support type annotations on headers
     CreateNamedTable {
         name: &'src str,
         headers: Vec<&'src str>,
@@ -78,9 +80,16 @@ pub enum AstPred<'src> {
     Bin(BinOp, Box<Self>, Box<Self>),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum BinOp {
     Eq,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum VType {
+    Num,
+    Str,
+    Bool,
 }
 
 /// Remember a span in the src for error messages.
@@ -93,11 +102,32 @@ impl Schema {
             .position(|&check| check == id)
             .map(FieldId)
     }
+
+    pub fn get_type(&self, id: StrId) -> Option<VType> {
+        self.types.get(self.get_index(id)?.0).copied()
+    }
 }
 
 impl Relation {
     // TODO: its unfortunate that this clone happens before any filtering.
     pub fn iter(&self) -> RowsIter {
-        RowsIter::new(self.rows.iter().cloned(), Cow::Borrowed(&self.schema))
+        RowsIter::new(self.rows.iter().cloned())
+    }
+}
+
+impl Value {
+    pub fn ty(&self) -> VType {
+        match self {
+            Value::Num(_) => VType::Num,
+            Value::Str(_) => VType::Str,
+            Value::Bool(_) => VType::Bool,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            &Value::Bool(b) => Some(b),
+            _ => None,
+        }
     }
 }

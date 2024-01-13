@@ -1,6 +1,9 @@
-use crate::ir::{AstExpr, AstValue, IrExpr, Loc, Relation, Row, Schema, Value};
+use crate::ir::{
+    AstExpr, AstPred, AstValue, BinOp, IrExpr, IrPred, Loc, Relation, Row, Schema, VType, Value,
+};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ops::BitAnd;
 use std::rc::Rc;
 
 // TODO: you can never remove strings from the cache to reclaim memory because someone might have a StrId referencing it.
@@ -11,9 +14,15 @@ pub struct Vm {
     pub tables: HashMap<StrId, Relation>,
 }
 
-// TODO: maybe row should also be a cow
-// TODO: pull schema up into IrExpr since want to use indices everywhere anyway.
-pub struct RowsIter<'a>(pub Box<dyn Iterator<Item = Row> + 'a>, pub Cow<'a, Schema>);
+#[derive(Debug, Clone)]
+pub enum CompErr {
+    // TODO
+}
+
+pub type Res<T> = Result<T, CompErr>;
+
+// TODO: maybe row should be a cow or better would be wrap the whole thing in an enum so you switch over borrowed vs owned once when creating the closure, not each row when running it
+pub struct RowsIter<'a>(pub Box<dyn Iterator<Item = Row> + 'a>);
 
 impl Vm {
     pub fn exec_from_src(&mut self, src: &str) -> Option<RowsIter> {
@@ -30,21 +39,31 @@ impl Vm {
             IrExpr::GetNamedTable(name) => self.tables.get(name)?.iter(),
             IrExpr::TakeFields(prev, fields) => {
                 let prev = self.eval(prev)?;
-                // TODO: why do i care about knowing the schema here?
-                //       the goal should be compile_impure mapping everything to indices
-                //       and eval should just trust that it works out.
-                let schema = Schema {
-                    names: fields.iter().map(|i| prev.1.names[i.0]).collect(),
-                };
-                RowsIter::new(
-                    prev.0.map(|row| Row {
-                        // TODO: could filter and reorder the existing vec?
-                        values: fields.iter().map(|i| row.values[i.0]).collect(),
-                    }),
-                    Cow::Owned(schema),
-                )
+                RowsIter::new(prev.0.map(|row| Row {
+                    // TODO: could filter and reorder the existing vec?
+                    values: fields.iter().map(|i| row.values[i.0]).collect(),
+                }))
+            }
+            IrExpr::Filter(prev, pred) => {
+                let pred = self.eval_pred(pred);
+                let prev = self.eval(prev)?;
+                RowsIter::new(prev.0.filter(move |row| pred(row).as_bool().unwrap()))
             }
         })
+    }
+
+    fn eval_pred<'a>(&self, pred: &'a IrPred) -> Box<dyn Fn(&Row) -> Value + 'a> {
+        match pred {
+            IrPred::Literal(lit) => Box::new(|_| *lit),
+            IrPred::Field(f) => Box::new(|row| row.values[f.0]),
+            IrPred::Bin(op, lhs, rhs) => {
+                let lhs = self.eval_pred(lhs);
+                let rhs = self.eval_pred(rhs);
+                match op {
+                    BinOp::Eq => Box::new(move |row| Value::Bool(lhs(row) == rhs(row))),
+                }
+            }
+        }
     }
 
     // TODO: result instead of assert/unwrap
@@ -65,8 +84,10 @@ impl Vm {
             AstExpr::TakeFields { input, fields } => {
                 let (input, prev) = self.compile_impure(*input);
                 assert!(prev.names.len() >= fields.len());
+                let names: Vec<_> = fields.iter().map(|name| self.intern(name)).collect();
                 let sc = Schema {
-                    names: fields.iter().map(|name| self.intern(name)).collect(),
+                    types: names.iter().map(|&n| prev.get_type(n).unwrap()).collect(),
+                    names,
                 };
                 let fields = fields
                     .into_iter()
@@ -78,18 +99,26 @@ impl Vm {
 
                 (IrExpr::TakeFields(Box::new(input), fields), sc)
             }
-            // TODO: untested
             AstExpr::CreateNamedTable {
                 name,
                 headers,
                 data,
             } => {
                 let name = self.intern(name);
+                let rows = self.load_table(data, headers.len());
+                // TODO: err if no rows
                 let schema = Schema {
                     names: headers.iter().map(|n| self.intern(n)).collect(),
+                    types: rows
+                        .first()
+                        .expect("some rows so can infer types")
+                        .values
+                        .iter()
+                        .map(|v| v.ty())
+                        .collect(),
                 };
                 let table = Relation {
-                    rows: self.load_table(data, &schema),
+                    rows,
                     name,
                     schema: schema.clone(),
                 };
@@ -97,27 +126,58 @@ impl Vm {
                 self.tables.insert(name, table);
                 (IrExpr::GetNamedTable(name), schema)
             }
-            AstExpr::Filter { .. } => todo!(),
+            AstExpr::Filter { input, cond } => {
+                let (prev, schema) = self.compile_impure(*input);
+                let (cond, ty) = self.compile_pred(cond, &schema);
+                assert_eq!(ty, VType::Bool, "filter predicate must be bool");
+                (IrExpr::Filter(Box::new(prev), cond), schema)
+            }
+        }
+    }
+
+    fn compile_pred(&mut self, expr: AstPred, schema: &Schema) -> (IrPred, VType) {
+        match expr {
+            AstPred::Literal(v) => {
+                let v = self.compile_value(v);
+                (IrPred::Literal(v), v.ty())
+            }
+            AstPred::Field(name) => {
+                let i = schema.get_index(self.intern(name)).unwrap(); // TODO
+                (IrPred::Field(i), schema.types[i.0])
+            }
+            AstPred::Bin(op, lhs, rhs) => {
+                let (l, lt) = self.compile_pred(*lhs, &schema);
+                let (r, rt) = self.compile_pred(*rhs, &schema);
+                assert_eq!(lt, rt);
+                assert_eq!(op, BinOp::Eq);
+                match op {
+                    BinOp::Eq => (IrPred::Bin(op, Box::new(l), Box::new(r)), VType::Bool),
+                }
+            }
         }
     }
 
     // TODO: schema type checking
-    fn load_table(&mut self, data: Vec<Vec<AstValue>>, schema: &Schema) -> Vec<Row> {
+    fn load_table(&mut self, data: Vec<Vec<AstValue>>, count: usize) -> Vec<Row> {
         data.into_iter()
             .map(|row| {
-                assert_eq!(schema.names.len(), row.len()); // TODO: result
+                assert_eq!(count, row.len()); // TODO: result
                 Row {
                     values: row
                         .into_iter()
-                        .map(|value| match value {
-                            AstValue::Num(n) => Value::Num(n),
-                            AstValue::Str(s) => Value::Str(self.intern(s)),
-                            AstValue::Bool(b) => Value::Bool(b),
-                        })
+                        .map(|value| self.compile_value(value))
                         .collect(),
                 }
             })
             .collect()
+    }
+
+    fn compile_value(&mut self, value: AstValue) -> Value {
+        match value {
+            AstValue::Num(n) => Value::Num(n),
+            AstValue::Str(s) => Value::Str(self.intern(s)),
+            AstValue::Bool(b) => Value::Bool(b),
+        }
     }
 
     pub fn get_str(&self, e: StrId) -> &str {
@@ -142,15 +202,15 @@ impl Vm {
 pub struct StrId(usize);
 
 impl<'a> RowsIter<'a> {
-    pub fn new(f: impl Iterator<Item = Row> + 'a, schema: Cow<'a, Schema>) -> Self {
-        Self(Box::new(f), schema)
+    pub fn new(f: impl Iterator<Item = Row> + 'a) -> Self {
+        Self(Box::new(f))
     }
 
     // This is awkward to call cause you can't add a name while the iter references the vm. TODO: make name optional
-    pub fn collect(self, name: StrId) -> Relation {
+    pub fn collect(self, name: StrId, schema: Schema) -> Relation {
         Relation {
             name,
-            schema: self.1.into_owned(),
+            schema,
             rows: self.0.collect(),
         }
     }
