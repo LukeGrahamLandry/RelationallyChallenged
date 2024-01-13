@@ -50,6 +50,7 @@ impl Vm {
             Value::Num(n) => format!("{n}"),
             &Value::Str(s) => format!("\"{}\"", self.get_str(s)),
             Value::Bool(b) => format!("{b}"),
+            Value::Nan => format!("NaN"),
         }
     }
 }

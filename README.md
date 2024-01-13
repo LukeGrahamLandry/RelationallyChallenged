@@ -6,13 +6,14 @@ It's a subset of the syntax of relaX. See `tests` folder for examples.
 
 ```
 Root => (Stmt)*
-Stmt => '(' Stmt ')' | Ident | Select Expr Stmt | Pi Fields Stmt | Table
+Stmt => '(' Stmt ')' | Ident | Select Expr Stmt | Pi Fields Stmt | Table | Stmt TBinOp Stmt
+TBinOp => 'union'
 Table => Ident '{' Fields Rows '}'
 Fields => (Ident ',')* Ident
 Rows => ((Value ',')* Value)*
-Expr => '(' Expr ')' | Value | Expr BinOp Expr
+Expr => '(' Expr ')' | Value | Expr ValBinOp Expr
 Value => quoted_string | number | Ident
-BinOp => '='
+ValBinOp => '='
 Pi => 'pi' | 'Π' | 'π'
 Select => 'select' | 'sigma' | 'σ'
 ```

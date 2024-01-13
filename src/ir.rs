@@ -1,6 +1,8 @@
 use crate::vm::{RowsIter, StrId};
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
@@ -11,22 +13,22 @@ pub struct Relation {
 }
 
 // TODO: it would be very nice if these didn't need to allocate
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Hash, Eq)]
 pub struct Row {
     pub values: Vec<Value>,
 }
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Schema {
     pub names: Vec<StrId>,
     pub types: Vec<VType>,
 }
 
-// TODO: floats mean you can't hash
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Value {
     Num(f64),
     Str(StrId),
     Bool(bool),
+    Nan,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -37,6 +39,11 @@ pub enum IrExpr {
     GetNamedTable(StrId),
     TakeFields(Box<IrExpr>, Vec<FieldId>),
     Filter(Box<IrExpr>, IrPred),
+    Bin {
+        op: TableBinOp,
+        lhs: Box<Self>,
+        rhs: Box<Self>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -57,12 +64,17 @@ pub enum AstExpr<'src> {
     },
     GetNamedTable(&'src str),
     TakeFields {
-        input: Box<Loc<AstExpr<'src>>>,
+        input: Box<Loc<Self>>,
         fields: Vec<&'src str>,
     },
     Filter {
-        input: Box<Loc<AstExpr<'src>>>,
+        input: Box<Loc<Self>>,
         cond: AstPred<'src>,
+    },
+    Bin {
+        op: TableBinOp,
+        lhs: Box<Loc<Self>>,
+        rhs: Box<Loc<Self>>,
     },
 }
 
@@ -83,6 +95,11 @@ pub enum AstPred<'src> {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum BinOp {
     Eq,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum TableBinOp {
+    Union,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -118,7 +135,7 @@ impl Relation {
 impl Value {
     pub fn ty(&self) -> VType {
         match self {
-            Value::Num(_) => VType::Num,
+            Value::Num(_) | Value::Nan => VType::Num,
             Value::Str(_) => VType::Str,
             Value::Bool(_) => VType::Bool,
         }
@@ -131,3 +148,26 @@ impl Value {
         }
     }
 }
+
+// f64: !Hash so do it myself with some random garbage for the tag
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Num(n) => {
+                state.write_i64(30197513748900);
+                state.write_u64(n.to_bits());
+            }
+            Value::Str(s) => {
+                state.write_i64(98711294340598);
+                state.write_usize(s.0);
+            }
+            Value::Bool(true) => state.write_i64(78219104210329751),
+            Value::Bool(false) => state.write_i64(1831294217),
+            Value::Nan => state.write_i64(8210726170476),
+        }
+    }
+}
+
+// Can't derive because f64: !Eq because NaN!=NaN,
+// but as long as I always carefully represent those with Value::Nan, then its fine.
+impl Eq for Value {}

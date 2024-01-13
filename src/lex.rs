@@ -24,6 +24,7 @@ pub enum TokenType<'a> {
     RightParen,
     Pi,
     Sigma,
+    Union,
     Comma,
     EOF,
 }
@@ -88,6 +89,7 @@ impl<'a> Lexer<'a> {
             ',' => self.one(Comma),
             'Π' | 'π' => self.one(Pi),
             'σ' => self.one(Sigma),
+            '∪' => self.one(Union),
             c => Err(LexErr::Unexpected(c)),
         }
     }
@@ -148,6 +150,7 @@ impl<'a> Lexer<'a> {
         let ty = match token.0 {
             "pi" => Pi,
             "select" | "sigma" => Sigma,
+            "union" => Union,
             text => Ident(text),
         };
         Ok(Token(ty, token.1))

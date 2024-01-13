@@ -1,6 +1,6 @@
-use relations::ir::Relation;
-use relations::lex::{LexErr, Lexer};
-use relations::parse::Parser;
+use relations::ir::{Relation, Row, Value};
+use relations::lex::{LexErr, Lexer, Token, TokenType};
+use relations::parse::{ParseErr, Parser};
 use relations::vm::Vm;
 
 fn make_numbers() -> String {
@@ -14,6 +14,7 @@ fn make_numbers() -> String {
     format!("Numbers = {{ Value, Name, Square\n{rows} }}")
 }
 
+// TODO: the other syntax. Name (Headers) = { Rows }
 const EMPLOYEES_TABLE: &str = r#"Employees = {EID, Name, Age
 E1, John, 32
 E2, Alice, 28
@@ -40,6 +41,39 @@ const STUDENT_QUERY: &str = r#"
       ⨝ cid=Course.id Course
 )"#;
 
+// Use with make_numbers()
+const FOUR_AND_FIVE_QUERY: &str = r#"
+(pi Value 
+(
+    (select Name='Four' (Numbers)) 
+    union 
+    (select Name='Five' (Numbers))
+) 
+union 
+(
+    select Name='Four' (Numbers)
+)
+)
+"#;
+
+#[test]
+fn select_pi() {
+    let four_squared = run_query(&format!(
+        "{}\n pi Square (select Name='Four' (pi Square, Name (Numbers)))",
+        make_numbers()
+    ));
+    assert_eq!(four_squared, vec![vec![Value::Num(16.0)]]);
+}
+
+#[test]
+fn union_simple() {
+    let four_and_five = run_query(&format!("{}{FOUR_AND_FIVE_QUERY}", make_numbers()));
+    // Order doesn't matter but require no dups.
+    let a = four_and_five == vec![vec![Value::Num(4.0)], vec![Value::Num(5.0)]];
+    let b = four_and_five == vec![vec![Value::Num(5.0)], vec![Value::Num(4.0)]];
+    assert!(a || b);
+}
+
 #[test]
 fn lex() {
     lex_span_sanity(&make_numbers(), 0);
@@ -57,35 +91,34 @@ fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
     let mut prev_end = 0;
     loop {
         match lex.next() {
+            Ok(Token(TokenType::EOF, _)) => break,
             Ok(token) => {
                 assert!(token.1.start >= prev_end, "tokens overlap");
                 found_count += token.1.end - token.1.start;
                 prev_end = token.1.end;
             }
-            Err(LexErr::EOF) => break,
             e => panic!("{:?}", e),
         }
     }
     assert_eq!(interesting_count, found_count);
 }
 
-#[test]
-fn parse() {
+// returns result of last query
+// any before are just compiled for side effects (ie. setup named tables)
+fn run_query(src: &str) -> Vec<Vec<Value>> {
     let mut vm = Vm::default();
-    let s = make_numbers();
-    let mut parse = Parser::new(Lexer::new(&s));
-    let q = vm.compile_impure(parse.next().unwrap()).0;
-    let _ = vm.eval(&q);
-    let mut parse = Parser::new(Lexer::new("pi Square, Name (Numbers)"));
-    let q = vm.compile_impure(parse.next().unwrap()).0;
-    let res = vm.eval(&q);
-    println!("{}", vm.print_rows_iter(res.unwrap()));
-    let mut parse = Parser::new(Lexer::new(
-        "pi Square (select Name='Four' (pi Square, Name (Numbers)))",
-    ));
-    let a = parse.next().unwrap();
-    println!("{a:?}");
-    let q = vm.compile_impure(a).0;
-    let res = vm.eval(&q);
-    println!("{}", vm.print_rows_iter(res.unwrap()));
+    let mut parse = Parser::new(Lexer::new(src));
+    let mut next = parse.next();
+    let mut q = None;
+    while next.is_ok() {
+        q = Some(vm.compile_impure(next.unwrap()).0);
+        next = parse.next();
+    }
+    match next {
+        Err(ParseErr::EOF) => {}
+        e => panic!("{e:?}"),
+    }
+    let q = q.unwrap();
+    let res = vm.eval(&q).unwrap();
+    res.0.map(|r| r.values).collect()
 }

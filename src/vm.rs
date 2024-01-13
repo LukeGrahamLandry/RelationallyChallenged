@@ -1,8 +1,10 @@
 use crate::ir::{
-    AstExpr, AstPred, AstValue, BinOp, IrExpr, IrPred, Loc, Relation, Row, Schema, VType, Value,
+    AstExpr, AstPred, AstValue, BinOp, IrExpr, IrPred, Loc, Relation, Row, Schema, TableBinOp,
+    VType, Value,
 };
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::iter::from_fn;
 use std::ops::BitAnd;
 use std::rc::Rc;
 
@@ -48,6 +50,36 @@ impl Vm {
                 let pred = self.eval_pred(pred);
                 let prev = self.eval(prev)?;
                 RowsIter::new(prev.0.filter(move |row| pred(row).as_bool().unwrap()))
+            }
+            IrExpr::Bin { op, lhs, rhs } => {
+                let lhs = self.eval(lhs)?;
+                let rhs = self.eval(rhs)?;
+                match op {
+                    TableBinOp::Union => {
+                        // Super ugly because I only want to drain lhs&rhs after the caller tries to poll
+                        // the iterator. Which is kinda pointless but I like the idea of eval being as lazy as possible.
+
+                        // This has to be an option because the iter is an FnMut so you can't consume lhs&rhs directly
+                        // because the compiler doesn't trust that I'll only do it once.
+                        // When you call take on the Option<FnOnce>, it replaces it with none so it doesn't actually move the variable out of the closure.
+                        let mut lazy = Some(move || {
+                            // TODO: sad day that i have to allocate the whole thing but idk how else you'd do this
+                            let all: HashSet<_> = lhs.0.chain(rhs.0).collect();
+                            all.into_iter()
+                        });
+
+                        // The first time this is called, compute the union and save that iterator.
+                        // Future calls will just poll from it.
+                        let mut cached = None;
+                        RowsIter::new(from_fn(move || match &mut cached {
+                            None => {
+                                cached = Some(lazy.take().unwrap()());
+                                cached.as_mut().unwrap().next()
+                            }
+                            Some(iter) => iter.next(),
+                        }))
+                    }
+                }
             }
         })
     }
@@ -132,6 +164,21 @@ impl Vm {
                 assert_eq!(ty, VType::Bool, "filter predicate must be bool");
                 (IrExpr::Filter(Box::new(prev), cond), schema)
             }
+            AstExpr::Bin { op, lhs, rhs } => {
+                let (lhs, lt) = self.compile_impure(*lhs);
+                let (rhs, rt) = self.compile_impure(*rhs);
+                // TODO: what are the rules here?
+                assert_eq!(lt, rt);
+                let schema = lt;
+                (
+                    IrExpr::Bin {
+                        op,
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                    schema,
+                )
+            }
         }
     }
 
@@ -174,7 +221,13 @@ impl Vm {
 
     fn compile_value(&mut self, value: AstValue) -> Value {
         match value {
-            AstValue::Num(n) => Value::Num(n),
+            AstValue::Num(n) => {
+                if n.is_nan() {
+                    Value::Nan
+                } else {
+                    Value::Num(n)
+                }
+            }
             AstValue::Str(s) => Value::Str(self.intern(s)),
             AstValue::Bool(b) => Value::Bool(b),
         }
@@ -199,7 +252,7 @@ impl Vm {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct StrId(usize);
+pub struct StrId(pub(crate) usize);
 
 impl<'a> RowsIter<'a> {
     pub fn new(f: impl Iterator<Item = Row> + 'a) -> Self {

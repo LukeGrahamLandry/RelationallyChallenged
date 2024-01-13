@@ -1,12 +1,12 @@
 //! Convert a stream of tokens to an AstExpr (or multiple)
 
-use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc};
+use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc, TableBinOp};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
 use std::ops::Range;
 
 pub struct Parser<'src> {
     lex: Lexer<'src>,
-    locs: Vec<Range<usize>>,
+    locs: Vec<Range<usize>>, // Note: i dont always pop so wont be empty at the end. TODO: bug waiting to happen
 }
 
 #[derive(Debug, Clone)]
@@ -15,6 +15,7 @@ pub enum ParseErr<'a> {
     WantVal(Token<'a>),
     WantExpr(Token<'a>),
     Lex(LexErr),
+    EOF,
 }
 
 type Res<'a, T> = Result<T, ParseErr<'a>>;
@@ -44,31 +45,53 @@ impl<'src> Parser<'src> {
                     loc,
                 ))
             }
-            _ => self.parse_table_expr(),
+            _ => self.parse_table_bin(),
         }
     }
 
-    fn parse_table_expr(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
+    fn parse_table_bin(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
+        self.push_loc()?;
+        let left = self.parse_table_un()?;
+        let t = self.lex.nth(0)?;
+        let op = match t.0 {
+            TokenType::Union => TableBinOp::Union,
+            _ => return Ok(left),
+        };
+        let _ = self.lex.next()?;
+        let right = self.parse_table_un()?;
+        let loc = self.pop_loc()?;
+        Ok((
+            AstExpr::Bin {
+                op,
+                lhs: Box::new(left),
+                rhs: Box::new(right),
+            },
+            loc,
+        ))
+    }
+
+    fn parse_table_un(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
         let t = self.lex.next()?;
         match t.0 {
             TokenType::Ident(name) => Ok((AstExpr::GetNamedTable(name), t.1)),
             TokenType::Pi => {
                 let fields = self.ident_list()?;
-                let input = Box::new(self.parse_table_expr()?);
+                let input = Box::new(self.parse_table_bin()?);
                 let end = input.1.start;
                 Ok((AstExpr::TakeFields { input, fields }, t.1.start..end))
             }
             TokenType::Sigma => {
                 let cond = self.pred()?;
-                let input = Box::new(self.parse_table_expr()?);
+                let input = Box::new(self.parse_table_bin()?);
                 let loc = t.1.start..input.1.end;
                 Ok((AstExpr::Filter { input, cond }, loc))
             }
             TokenType::LeftParen => {
-                let expr = self.parse_table_expr()?;
+                let expr = self.parse_table_bin()?;
                 self.require(TokenType::RightParen)?;
                 Ok(expr)
             }
+            TokenType::EOF => Err(ParseErr::EOF),
             _ => todo!("err"),
         }
     }

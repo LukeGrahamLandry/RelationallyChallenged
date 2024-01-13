@@ -2,7 +2,6 @@
 ## TODO
 
 - (gt, lt, and, or, not) in filter predicate 
-- union
 - intersection
 - set difference 
 - join
@@ -12,6 +11,17 @@
 - error handing
 - pretty print ast
 - inline relations
+
+## set ops (Jan 13)
+
+Would be really nice to just put things in a hash set but float: !Hash.  
+Maybe: `if n.is_nan() { n = f64::NAN; }`  
+
+Probably no point to this but it makes me feel better about iffy hash impl for floats
+Make any nans the one official bit pattern so they match when cast to u64 and hashed.
+For that to make any since need manual eq too since nan!=nan.
+Maybe its better to declare Num never nan and have a separate Value::Nan variant
+and just always check division (which i dont even have yet anyway)
 
 ## more parsing and filter (Jan 13)
 
