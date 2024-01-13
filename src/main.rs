@@ -34,12 +34,10 @@ fn main() {
     };
     println!("{}", vm.print_table(&table));
     let name = vm.intern("Result");
-    let prev = table.schema.clone();
     vm.tables.insert(table.name, table);
-    let query = vm.compile_impure((
+    let (query, _) = vm.compile_impure((
         AstExpr::TakeFields {
             input: Box::new((AstExpr::GetNamedTable("Numbers"), 0..1)),
-            prev,
             fields: vec!["Square", "Name"],
         },
         0..1,

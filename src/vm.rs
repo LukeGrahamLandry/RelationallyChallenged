@@ -52,16 +52,22 @@ impl Vm {
     /// Preprocess and type check an ast.
     /// The result is only valid if eval-ed on THIS vm instance. TODO: enforce with lifetime
     /// Note: CreateNamedTable runs NOW, not during eval.
-    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> IrExpr {
+    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> (IrExpr, Schema) {
         match expr {
-            AstExpr::GetNamedTable(name) => IrExpr::GetNamedTable(self.intern(name)),
-            AstExpr::TakeFields {
-                input,
-                prev,
-                fields,
-            } => {
+            AstExpr::GetNamedTable(name) => {
+                let name = self.intern(name);
+                let schema = match self.tables.get(&name) {
+                    None => todo!("err, table not defined"),
+                    Some(t) => t.schema.clone(),
+                };
+                (IrExpr::GetNamedTable(name), schema)
+            }
+            AstExpr::TakeFields { input, fields } => {
+                let (input, prev) = self.compile_impure(*input);
                 assert!(prev.names.len() >= fields.len());
-                let input = self.compile_impure(*input);
+                let sc = Schema {
+                    names: fields.iter().map(|name| self.intern(name)).collect(),
+                };
                 let fields = fields
                     .into_iter()
                     .map(|name| {
@@ -69,7 +75,8 @@ impl Vm {
                         prev.get_index(id).expect("Field lookup")
                     })
                     .collect();
-                IrExpr::TakeFields(Box::new(input), fields)
+
+                (IrExpr::TakeFields(Box::new(input), fields), sc)
             }
             // TODO: untested
             AstExpr::CreateNamedTable {
@@ -84,11 +91,11 @@ impl Vm {
                 let table = Relation {
                     rows: self.load_table(data, &schema),
                     name,
-                    schema,
+                    schema: schema.clone(),
                 };
                 // TODO: check for stomping?
                 self.tables.insert(name, table);
-                IrExpr::GetNamedTable(name)
+                (IrExpr::GetNamedTable(name), schema)
             }
         }
     }

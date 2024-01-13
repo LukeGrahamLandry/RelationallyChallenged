@@ -49,12 +49,11 @@ pub enum AstExpr<'src> {
     GetNamedTable(&'src str),
     TakeFields {
         input: Box<Loc<AstExpr<'src>>>,
-        prev: Schema,
         fields: Vec<&'src str>,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum AstValue<'src> {
     Num(f64),
     Str(&'src str),

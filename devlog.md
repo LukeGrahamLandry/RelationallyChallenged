@@ -15,11 +15,23 @@
 - pretty print ast
 - inline relations
 
+## more parsing (Jan 13)
+
+often need to parse any number of comma seperated things (rows, headers, pi args). 
+
+for parsing projection, you really dont want to deal with knowing the schema of the input table so 
+its a good time to move that to the compile step. 
+
 ## parse it bb (Jan 12)
 
 I want to use the same syntax as relax so its easy to test against but also i dont want to be white space sensitive. 
 buts its fine cause when you're done the row header, there's two values next to each-other without a comma. 
 just need extra an lookahead. TODO: probably better to represent eof as a token value instead of an error. 
+
+want a function to expect a TokenType and error if not but my choice to have payloads making it hard because 
+you can't check equality for an ident/quoted/num, and you can't pass a match expression to a function. 
+So options are a: deal with it being ugly, b: make it a macro, c: give Token an optional of all the possible payloads 
+(which is just AstValue I guess). for now, ugly but might revisit. 
 
 ## lex it bb (Jan 10)
 

@@ -1,5 +1,7 @@
+use relations::ir::Relation;
 use relations::lex::{LexErr, Lexer};
 use relations::parse::Parser;
+use relations::vm::Vm;
 
 fn make_numbers() -> String {
     let rows: String = [
@@ -30,6 +32,13 @@ Courses = {CourseID, CourseName, Professor
 "C102", "Quantum Physics", "Dr. Doe"
 "C103", "Calculus", "Dr. White"
 }"#;
+
+// TODO: not on ^. its just an example from bright space
+const STUDENT_QUERY: &str = r#"
+π name, title, mark (
+      (Student ⨝Student.id=Takes.sidTakes)
+      ⨝ cid=Course.id Course
+)"#;
 
 #[test]
 fn lex() {
@@ -62,6 +71,14 @@ fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
 
 #[test]
 fn parse() {
-    let mut parse = Parser::new(Lexer::new(EMPLOYEES_TABLE));
-    println!("{:?}", parse.next());
+    let mut vm = Vm::default();
+    let name = vm.intern("Result");
+    let s = make_numbers();
+    let mut parse = Parser::new(Lexer::new(&s));
+    let q = vm.compile_impure(parse.next().unwrap()).0;
+    let _ = vm.eval(&q);
+    let mut parse = Parser::new(Lexer::new("pi Square, Name (Numbers)"));
+    let q = vm.compile_impure(parse.next().unwrap()).0;
+    let res = vm.eval(&q);
+    println!("{}", vm.print_rows_iter(res.unwrap(), name));
 }

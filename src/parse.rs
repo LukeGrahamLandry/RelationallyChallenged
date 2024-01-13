@@ -1,6 +1,6 @@
 //! Convert a stream of tokens to an AstExpr (or multiple)
 
-use crate::ir::{AstExpr, AstValue};
+use crate::ir::{AstExpr, AstValue, Loc};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
 
 pub struct Parser<'src> {
@@ -21,34 +21,74 @@ impl<'src> Parser<'src> {
         Self { lex }
     }
 
-    pub fn next(&mut self) -> Res<AstExpr<'src>> {
-        let t = self.lex.next()?;
+    pub fn next(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
+        let t = self.lex.nth(0)?;
         match t.0 {
             TokenType::Ident(name) => {
+                self.lex.next()?;
                 self.require(TokenType::Equals)?;
                 self.require(TokenType::LeftSquiggle)?;
-                let headers = self.parse_headers()?;
-                Ok(AstExpr::CreateNamedTable {
-                    data: self.parse_rows(headers.len())?,
-                    name,
-                    headers,
-                })
+                let headers = self.ident_list()?;
+                Ok((
+                    AstExpr::CreateNamedTable {
+                        data: self.parse_rows(headers.len())?,
+                        name,
+                        headers,
+                    },
+                    0..1,
+                ))
             }
-            _ => Err(ParseErr::WantFound(TokenType::Ident(""), t)),
+            _ => self.parse_table_expr(),
         }
     }
 
-    fn parse_headers(&mut self) -> Res<'src, Vec<&'src str>> {
-        let mut names = vec![];
+    fn parse_table_expr(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
+        let t = self.lex.next()?;
+        match t.0 {
+            TokenType::Ident(name) => Ok((AstExpr::GetNamedTable(name), t.1)),
+            TokenType::Pi => {
+                let fields = self.ident_list()?;
+                let input = self.parse_table_expr()?;
+                let end = input.1.start;
+                Ok((
+                    AstExpr::TakeFields {
+                        input: Box::new(input),
+                        fields,
+                    },
+                    t.1.start..end,
+                ))
+            }
+            TokenType::LeftParen => {
+                let expr = self.parse_table_expr()?;
+                self.require(TokenType::RightParen)?;
+                Ok(expr)
+            }
+            _ => todo!("err"),
+        }
+    }
+
+    fn comma_sep(&mut self) -> Res<'src, Vec<Token<'src>>> {
+        let mut tokens = vec![];
         loop {
-            names.push(self.require_ident()?);
+            tokens.push(self.lex.next()?); // TODO: only some things are valid. want to catch trailing comma
             if self.lex.nth(0)?.0 == TokenType::Comma {
                 self.lex.next()?;
             } else {
                 break;
             }
         }
-        Ok(names)
+        Ok(tokens)
+    }
+
+    fn ident_list(&mut self) -> Res<'src, Vec<&'src str>> {
+        Ok(self
+            .comma_sep()?
+            .into_iter()
+            .map(|t| match t.0 {
+                TokenType::Ident(s) => s,
+                _ => todo!("err, header wanted ident"),
+            })
+            .collect())
     }
 
     fn parse_rows(&mut self, width: usize) -> Res<'src, Vec<Vec<AstValue<'src>>>> {
