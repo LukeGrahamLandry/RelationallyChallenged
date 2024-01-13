@@ -38,6 +38,13 @@ pub enum IrExpr {
     TakeFields(Box<IrExpr>, Vec<FieldId>),
 }
 
+#[derive(Debug, Clone)]
+pub enum IrPred {
+    Literal(Value),
+    Field(FieldId),
+    Bin(BinOp, Box<Self>, Box<Self>),
+}
+
 #[derive(Debug)]
 pub enum AstExpr<'src> {
     // TODO: this has side effects when compiled not when evaluated which probably the wrong choice.
@@ -51,6 +58,10 @@ pub enum AstExpr<'src> {
         input: Box<Loc<AstExpr<'src>>>,
         fields: Vec<&'src str>,
     },
+    Filter {
+        input: Box<Loc<AstExpr<'src>>>,
+        cond: AstPred<'src>,
+    },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -58,6 +69,18 @@ pub enum AstValue<'src> {
     Num(f64),
     Str(&'src str),
     Bool(bool),
+}
+
+#[derive(Debug, Clone)]
+pub enum AstPred<'src> {
+    Literal(AstValue<'src>),
+    Field(&'src str),
+    Bin(BinOp, Box<Self>, Box<Self>),
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum BinOp {
+    Eq,
 }
 
 /// Remember a span in the src for error messages.

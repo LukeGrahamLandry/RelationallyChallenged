@@ -22,7 +22,9 @@ pub enum TokenType<'a> {
     LeftParen,
     RightParen,
     Pi,
+    Sigma,
     Comma,
+    EOF,
 }
 
 pub type Res<T> = Result<T, LexErr>;
@@ -60,7 +62,14 @@ impl<'a> Lexer<'a> {
             return prev;
         }
 
-        self.do_next()
+        self.do_next_eof()
+    }
+
+    fn do_next_eof(&mut self) -> Res<Token<'a>> {
+        match self.do_next() {
+            Err(LexErr::EOF) => Ok(Token(EOF, self.current..self.current)),
+            other => other,
+        }
     }
 
     fn do_next(&mut self) -> Res<Token<'a>> {
@@ -77,6 +86,7 @@ impl<'a> Lexer<'a> {
             '=' => self.one(Equals),
             ',' => self.one(Comma),
             'Π' | 'π' => self.one(Pi),
+            'σ' => self.one(Sigma),
             c => Err(LexErr::Unexpected(c)),
         }
     }
@@ -84,7 +94,7 @@ impl<'a> Lexer<'a> {
     // generate enough to look ahead i tokens.
     pub fn nth(&mut self, i: usize) -> Res<Token<'a>> {
         while self.peeked.len() <= i {
-            let t = self.do_next();
+            let t = self.do_next_eof();
             self.peeked.push_back(t);
         }
         self.peeked[i].clone()
@@ -136,6 +146,7 @@ impl<'a> Lexer<'a> {
         let token = self.lex_ident_raw()?;
         let ty = match token.0 {
             "pi" => Pi,
+            "select" | "sigma" => Sigma,
             text => Ident(text),
         };
         Ok(Token(ty, token.1))

@@ -1,16 +1,19 @@
 //! Convert a stream of tokens to an AstExpr (or multiple)
 
-use crate::ir::{AstExpr, AstValue, Loc};
+use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
+use std::ops::Range;
 
 pub struct Parser<'src> {
     lex: Lexer<'src>,
+    locs: Vec<Range<usize>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum ParseErr<'a> {
     WantFound(TokenType<'a>, Token<'a>),
     WantVal(Token<'a>),
+    WantExpr(Token<'a>),
     Lex(LexErr),
 }
 
@@ -18,24 +21,27 @@ type Res<'a, T> = Result<T, ParseErr<'a>>;
 
 impl<'src> Parser<'src> {
     pub fn new(lex: Lexer<'src>) -> Self {
-        Self { lex }
+        Self { lex, locs: vec![] }
     }
 
     pub fn next(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
         let t = self.lex.nth(0)?;
         match t.0 {
             TokenType::Ident(name) => {
+                self.push_loc()?;
                 self.lex.next()?;
                 self.require(TokenType::Equals)?;
                 self.require(TokenType::LeftSquiggle)?;
                 let headers = self.ident_list()?;
+                let data = self.parse_rows(headers.len())?;
+                let loc = self.pop_loc()?;
                 Ok((
                     AstExpr::CreateNamedTable {
-                        data: self.parse_rows(headers.len())?,
+                        data,
                         name,
                         headers,
                     },
-                    0..1,
+                    loc,
                 ))
             }
             _ => self.parse_table_expr(),
@@ -48,15 +54,15 @@ impl<'src> Parser<'src> {
             TokenType::Ident(name) => Ok((AstExpr::GetNamedTable(name), t.1)),
             TokenType::Pi => {
                 let fields = self.ident_list()?;
-                let input = self.parse_table_expr()?;
+                let input = Box::new(self.parse_table_expr()?);
                 let end = input.1.start;
-                Ok((
-                    AstExpr::TakeFields {
-                        input: Box::new(input),
-                        fields,
-                    },
-                    t.1.start..end,
-                ))
+                Ok((AstExpr::TakeFields { input, fields }, t.1.start..end))
+            }
+            TokenType::Sigma => {
+                let cond = self.pred()?;
+                let input = Box::new(self.parse_table_expr()?);
+                let loc = t.1.start..input.1.end;
+                Ok((AstExpr::Filter { input, cond }, loc))
             }
             TokenType::LeftParen => {
                 let expr = self.parse_table_expr()?;
@@ -64,6 +70,33 @@ impl<'src> Parser<'src> {
                 Ok(expr)
             }
             _ => todo!("err"),
+        }
+    }
+
+    fn pred(&mut self) -> Res<'src, AstPred<'src>> {
+        let left = self.pred_primary()?;
+        match self.lex.nth(0)?.0 {
+            TokenType::Equals => {
+                self.require(TokenType::Equals)?;
+                let right = self.pred()?;
+                Ok(AstPred::Bin(BinOp::Eq, Box::new(left), Box::new(right)))
+            }
+            _ => Ok(left),
+        }
+    }
+
+    fn pred_primary(&mut self) -> Res<'src, AstPred<'src>> {
+        let t = self.lex.next()?;
+        match t.0 {
+            TokenType::Ident(name) => Ok(AstPred::Field(name)),
+            TokenType::Number(n) => Ok(AstPred::Literal(AstValue::Num(n))),
+            TokenType::Quoted(s) => Ok(AstPred::Literal(AstValue::Str(s))),
+            TokenType::LeftParen => {
+                let e = self.pred()?;
+                self.require(TokenType::RightParen)?;
+                Ok(e)
+            }
+            _ => Err(ParseErr::WantExpr(t)),
         }
     }
 
@@ -131,6 +164,17 @@ impl<'src> Parser<'src> {
             return Ok(v);
         }
         return Err(ParseErr::WantFound(TokenType::Ident(""), found));
+    }
+
+    fn push_loc(&mut self) -> Res<'src, ()> {
+        self.locs.push(self.lex.nth(0)?.1);
+        Ok(())
+    }
+
+    fn pop_loc(&mut self) -> Res<'src, Range<usize>> {
+        let start = self.locs.pop().unwrap().start; // TODO: err
+        let end = self.lex.nth(0)?.1.start; // TODO: want last token not next
+        Ok(start..end)
     }
 }
 

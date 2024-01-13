@@ -97,6 +97,7 @@ impl Vm {
                 self.tables.insert(name, table);
                 (IrExpr::GetNamedTable(name), schema)
             }
+            AstExpr::Filter { .. } => todo!(),
         }
     }
 

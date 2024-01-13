@@ -81,4 +81,10 @@ fn parse() {
     let q = vm.compile_impure(parse.next().unwrap()).0;
     let res = vm.eval(&q);
     println!("{}", vm.print_rows_iter(res.unwrap(), name));
+    let mut parse = Parser::new(Lexer::new("select Name='Four' (pi Square, Name (Numbers))"));
+    let a = parse.next().unwrap();
+    println!("{a:?}");
+    let q = vm.compile_impure(a).0;
+    let res = vm.eval(&q);
+    println!("{}", vm.print_rows_iter(res.unwrap(), name));
 }
