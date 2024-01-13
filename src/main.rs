@@ -37,7 +37,7 @@ fn main() {
     let prev = table.schema.clone();
     vm.tables.insert(table.name, table);
     let query = vm.compile_impure((
-        AstExpr::Projection {
+        AstExpr::TakeFields {
             input: Box::new((AstExpr::GetNamedTable("Numbers"), 0..1)),
             prev,
             fields: vec!["Square", "Name"],

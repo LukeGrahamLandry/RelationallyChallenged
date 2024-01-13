@@ -12,9 +12,14 @@ pub struct Vm {
 }
 
 // TODO: maybe row should also be a cow
+// TODO: pull schema up into IrExpr since want to use indices everywhere anyway.
 pub struct RowsIter<'a>(pub Box<dyn Iterator<Item = Row> + 'a>, pub Cow<'a, Schema>);
 
 impl Vm {
+    pub fn exec_from_src(&mut self, src: &str) -> Option<RowsIter> {
+        todo!()
+    }
+
     // TODO: if i was feeling fancy, the Vm could have a pool of row vecs and impl drop to return them
     //       so you dont have to do an allocation for every row. (same for the closure boxes but that's harder to think about)
     /// If this ever returns None, its a bug in compile() so I don't care about error messages but I don't want to unwrap and crash.
@@ -23,8 +28,11 @@ impl Vm {
     pub fn eval<'a>(&'a self, expr: &'a IrExpr) -> Option<RowsIter<'a>> {
         Some(match expr {
             IrExpr::GetNamedTable(name) => self.tables.get(name)?.iter(),
-            IrExpr::Projection(prev, fields) => {
+            IrExpr::TakeFields(prev, fields) => {
                 let prev = self.eval(prev)?;
+                // TODO: why do i care about knowing the schema here?
+                //       the goal should be compile_impure mapping everything to indices
+                //       and eval should just trust that it works out.
                 let schema = Schema {
                     names: fields.iter().map(|i| prev.1.names[i.0]).collect(),
                 };
@@ -47,7 +55,7 @@ impl Vm {
     pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> IrExpr {
         match expr {
             AstExpr::GetNamedTable(name) => IrExpr::GetNamedTable(self.intern(name)),
-            AstExpr::Projection {
+            AstExpr::TakeFields {
                 input,
                 prev,
                 fields,
@@ -61,7 +69,7 @@ impl Vm {
                         prev.get_index(id).expect("Field lookup")
                     })
                     .collect();
-                IrExpr::Projection(Box::new(input), fields)
+                IrExpr::TakeFields(Box::new(input), fields)
             }
             // TODO: untested
             AstExpr::CreateNamedTable {
@@ -78,6 +86,7 @@ impl Vm {
                     name,
                     schema,
                 };
+                // TODO: check for stomping?
                 self.tables.insert(name, table);
                 IrExpr::GetNamedTable(name)
             }

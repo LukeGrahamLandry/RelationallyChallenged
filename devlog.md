@@ -13,7 +13,13 @@
 - tests
 - error handing
 - pretty print ast
-- inline relations 
+- inline relations
+
+## parse it bb (Jan 12)
+
+I want to use the same syntax as relax so its easy to test against but also i dont want to be white space sensitive. 
+buts its fine cause when you're done the row header, there's two values next to each-other without a comma. 
+just need extra an lookahead. TODO: probably better to represent eof as a token value instead of an error. 
 
 ## lex it bb (Jan 10)
 

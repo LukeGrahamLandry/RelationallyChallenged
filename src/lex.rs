@@ -1,6 +1,7 @@
 //! Convert a string of source code into a stream of tokens.
 
 use crate::lex::TokenType::*;
+use std::collections::VecDeque;
 use std::iter::Peekable;
 use std::num::ParseFloatError;
 use std::ops::Range;
@@ -10,7 +11,7 @@ use std::str::Chars;
 #[derive(Debug, Clone)]
 pub struct Token<'a>(pub TokenType<'a>, pub Range<usize>);
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType<'a> {
     Ident(&'a str),
     Number(f64),
@@ -39,7 +40,7 @@ pub struct Lexer<'a> {
     start: usize,
     current: usize,
     chars: Peekable<Chars<'a>>,
-    peeked: Option<Res<Token<'a>>>,
+    peeked: VecDeque<Res<Token<'a>>>,
 }
 
 impl<'a> Lexer<'a> {
@@ -49,15 +50,20 @@ impl<'a> Lexer<'a> {
             start: 0,
             current: 0,
             chars: src.chars().peekable(),
-            peeked: None,
+            peeked: VecDeque::with_capacity(10),
         }
     }
 
+    // pop the first buffered token or generate a new one
     pub fn next(&mut self) -> Res<Token<'a>> {
-        if let Some(prev) = self.peeked.take() {
+        if let Some(prev) = self.peeked.pop_front() {
             return prev;
         }
 
+        self.do_next()
+    }
+
+    fn do_next(&mut self) -> Res<Token<'a>> {
         self.eat_whitespace()?;
         self.start = self.current;
         match self.peek_c()? {
@@ -75,15 +81,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn peek(&mut self) -> Res<Token<'a>> {
-        match self.peeked.clone() {
-            None => {
-                let next = self.next();
-                self.peeked = Some(next.clone());
-                next
-            }
-            Some(prev) => prev,
+    // generate enough to look ahead i tokens.
+    pub fn nth(&mut self, i: usize) -> Res<Token<'a>> {
+        while self.peeked.len() <= i {
+            let t = self.do_next();
+            self.peeked.push_back(t);
         }
+        self.peeked[i].clone()
     }
 
     fn one(&mut self, t: TokenType<'static>) -> Res<Token<'a>> {

@@ -11,7 +11,7 @@ pub struct Relation {
 }
 
 // TODO: it would be very nice if these didn't need to allocate
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Row {
     pub values: Vec<Value>,
 }
@@ -21,6 +21,7 @@ pub struct Schema {
     pub names: Vec<StrId>,
 }
 
+// TODO: floats mean you can't hash
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Value {
     Num(f64),
@@ -34,7 +35,7 @@ pub struct FieldId(pub usize);
 #[derive(Debug)]
 pub enum IrExpr {
     GetNamedTable(StrId),
-    Projection(Box<IrExpr>, Vec<FieldId>),
+    TakeFields(Box<IrExpr>, Vec<FieldId>),
 }
 
 #[derive(Debug)]
@@ -46,8 +47,7 @@ pub enum AstExpr<'src> {
         data: Vec<Vec<AstValue<'src>>>,
     },
     GetNamedTable(&'src str),
-    /// Filter and reorder fields
-    Projection {
+    TakeFields {
         input: Box<Loc<AstExpr<'src>>>,
         prev: Schema,
         fields: Vec<&'src str>,

@@ -1,4 +1,5 @@
 use relations::lex::{LexErr, Lexer};
+use relations::parse::Parser;
 
 fn make_numbers() -> String {
     let rows: String = [
@@ -11,7 +12,7 @@ fn make_numbers() -> String {
     format!("Numbers = {{ Value, Name, Square\n{rows} }}")
 }
 
-const EMPLOYEES_TABLE: &str = r#"Employees (EID, Name, Age) = {
+const EMPLOYEES_TABLE: &str = r#"Employees = {EID, Name, Age
 E1, John, 32
 E2, Alice, 28
 E3, Bob, 29
@@ -42,7 +43,7 @@ fn lex() {
 fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
     let interesting_count =
         src.chars().filter(|c| !c.is_whitespace()).count() + hack_quoted_whitespace;
-    let mut lex = Lexer::new(&src);
+    let mut lex = Lexer::new(src);
     let mut found_count = 0;
     let mut prev_end = 0;
     loop {
@@ -57,4 +58,10 @@ fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
         }
     }
     assert_eq!(interesting_count, found_count);
+}
+
+#[test]
+fn parse() {
+    let mut parse = Parser::new(Lexer::new(EMPLOYEES_TABLE));
+    println!("{:?}", parse.next());
 }
