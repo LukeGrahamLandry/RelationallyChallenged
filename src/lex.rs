@@ -28,6 +28,14 @@ pub enum TokenType<'a> {
     Intersection,
     Comma,
     EOF,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    LeftTriangle,
+    RightTriangle,
+    And,
+    Or,
 }
 
 pub type Res<T> = Result<T, LexErr>;
@@ -92,6 +100,12 @@ impl<'a> Lexer<'a> {
             'σ' => self.one(Sigma),
             '∪' => self.one(Union),
             '∩' => self.one(Intersection),
+            '+' => self.one(Plus),
+            '-' => self.one(Minus),
+            '*' => self.one(Star),
+            '/' => self.one(Slash),
+            '<' => self.one(LeftTriangle),
+            '>' => self.one(RightTriangle),
             c => Err(LexErr::Unexpected(c)),
         }
     }
@@ -154,6 +168,8 @@ impl<'a> Lexer<'a> {
             "select" | "sigma" => Sigma,
             "union" => Union,
             "intersect" | "intersection" => Intersection,
+            "and" | "AND" => And,
+            "or" | "OR" => Or,
             text => Ident(text),
         };
         Ok(Token(ty, token.1))

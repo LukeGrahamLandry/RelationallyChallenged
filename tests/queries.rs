@@ -1,5 +1,5 @@
-use relations::ir::{Relation, Row, Value};
-use relations::lex::{LexErr, Lexer, Token, TokenType};
+use relations::ir::Value;
+use relations::lex::{Lexer, Token, TokenType};
 use relations::parse::{ParseErr, Parser};
 use relations::vm::Vm;
 
@@ -34,9 +34,34 @@ Courses = {CourseID, CourseName, Professor
 "C103", "Calculus", "Dr. White"
 }"#;
 
+const SCHOOL_TABLE_2: &str = r#"
+Student = {
+id, name, email
+1, 'Alex', 'alex@carleton.ca'
+2, 'John', 'john@carleton.ca'
+3, 'Mo', 'mo@carleton.ca'
+}
+
+Course = {
+name, hours
+'Math', 3
+'Pythics', 2
+'Network', 3
+}
+
+takes = {
+sid, cname
+1, 'Math'
+1, 'Pythics'
+1, 'Network'
+2, 'Network'
+3, 'Math'
+}
+"#;
+
 // TODO: not on ^. its just an example from bright space
 // TODO: supporting this needs some concept of namespaces across tables
-const STUDENT_QUERY: &str = r#"
+const _STUDENT_QUERY: &str = r#"
 π name, title, mark (
       (Student ⨝Student.id=Takes.sidTakes)
       ⨝ cid=Course.id Course
@@ -72,6 +97,12 @@ fn union_simple() {
     let a = four_and_five == vec![vec![Value::Num(4.0)], vec![Value::Num(5.0)]];
     let b = four_and_five == vec![vec![Value::Num(5.0)], vec![Value::Num(4.0)]];
     assert!(a || b);
+}
+
+#[test]
+fn join() {
+    let res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
+    todo!("{:?}", res)
 }
 
 #[test]
@@ -111,7 +142,7 @@ fn run_query(src: &str) -> Vec<Vec<Value>> {
     let mut next = parse.next();
     let mut q = None;
     while next.is_ok() {
-        q = Some(vm.compile_impure(next.unwrap()).0);
+        q = Some(vm.compile_impure(next.unwrap()).unwrap().0);
         next = parse.next();
     }
     match next {
@@ -119,6 +150,6 @@ fn run_query(src: &str) -> Vec<Vec<Value>> {
         e => panic!("{e:?}"),
     }
     let q = q.unwrap();
-    let res = vm.eval(&q).unwrap();
+    let res = vm.eval(&q);
     res.0.map(|r| r.values).collect()
 }

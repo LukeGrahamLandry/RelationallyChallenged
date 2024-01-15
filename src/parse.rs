@@ -72,6 +72,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_table_un(&mut self) -> Res<'src, Loc<AstExpr<'src>>> {
+        // TODO: pull out loc stuff to use my stack
         let t = self.lex.next()?;
         match t.0 {
             TokenType::Ident(name) => Ok((AstExpr::GetNamedTable(name), t.1)),
@@ -100,14 +101,22 @@ impl<'src> Parser<'src> {
     // TODO: precedence
     fn pred(&mut self) -> Res<'src, AstPred<'src>> {
         let left = self.pred_primary()?;
-        match self.lex.nth(0)?.0 {
-            TokenType::Equals => {
-                self.require(TokenType::Equals)?;
-                let right = self.pred()?;
-                Ok(AstPred::Bin(BinOp::Eq, Box::new(left), Box::new(right)))
-            }
-            _ => Ok(left),
-        }
+        let bin_op = match self.lex.nth(0)?.0 {
+            TokenType::Equals => BinOp::Eq,
+            TokenType::Or => BinOp::Or,
+            TokenType::And => BinOp::And,
+            TokenType::Plus => BinOp::And,
+            TokenType::Minus => BinOp::Sub,
+            TokenType::Star => BinOp::Mul,
+            TokenType::Slash => BinOp::Div,
+            TokenType::LeftTriangle => BinOp::Lt,
+            TokenType::RightTriangle => BinOp::Gt,
+            _ => return Ok(left),
+        };
+
+        self.lex.next()?;
+        let right = self.pred()?;
+        Ok(AstPred::Bin(bin_op, Box::new(left), Box::new(right)))
     }
 
     fn pred_primary(&mut self) -> Res<'src, AstPred<'src>> {
@@ -155,7 +164,7 @@ impl<'src> Parser<'src> {
             let mut row = vec![];
             row.push(self.parse_value()?);
             for _ in 0..(width - 1) {
-                // TODO: better error if row wrong length. maybe fn for list of comma seperated tokens and reuse for header
+                // TODO: better error if row wrong length. use the fn for list of comma seperated tokens.
                 self.require(TokenType::Comma)?;
                 row.push(self.parse_value()?);
             }
@@ -183,7 +192,7 @@ impl<'src> Parser<'src> {
         Ok(())
     }
 
-    fn require_ident(&mut self) -> Res<'src, &'src str> {
+    fn _require_ident(&mut self) -> Res<'src, &'src str> {
         let found = self.lex.next()?;
         if let TokenType::Ident(v) = found.0 {
             return Ok(v);

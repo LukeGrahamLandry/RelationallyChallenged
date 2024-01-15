@@ -1,6 +1,5 @@
-use crate::vm::{RowsIter, StrId};
-use std::borrow::Cow;
-use std::collections::HashSet;
+use crate::vm;
+use crate::vm::{CompErr, RowsIter, StrId};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
@@ -95,6 +94,14 @@ pub enum AstPred<'src> {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum BinOp {
     Eq,
+    Or,
+    And,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Gt,
+    Lt,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -114,15 +121,17 @@ pub enum VType {
 pub type Loc<T> = (T, Range<usize>); // TODO: range not actually used yet.
 
 impl Schema {
-    pub fn get_index(&self, id: StrId) -> Option<FieldId> {
+    pub fn get_index(&self, id: StrId) -> vm::Res<FieldId> {
         self.names
             .iter()
             .position(|&check| check == id)
             .map(FieldId)
+            .ok_or_else(|| CompErr::BadFieldName(id, self.clone()))
     }
 
-    pub fn get_type(&self, id: StrId) -> Option<VType> {
-        self.types.get(self.get_index(id)?.0).copied()
+    pub fn get_type(&self, id: StrId) -> vm::Res<VType> {
+        // unwrap cant fail if get_index didnt
+        Ok(self.types.get(self.get_index(id)?.0).copied().unwrap())
     }
 }
 
@@ -142,10 +151,18 @@ impl Value {
         }
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
+    pub fn as_bool(&self) -> bool {
         match self {
-            &Value::Bool(b) => Some(b),
-            _ => None,
+            &Value::Bool(b) => b,
+            _ => panic!("expect bool but {self:?}"),
+        }
+    }
+
+    pub fn as_num(&self) -> f64 {
+        match self {
+            &Value::Num(n) => n,
+            Value::Nan => f64::NAN,
+            _ => panic!("expect num but {self:?}"),
         }
     }
 }

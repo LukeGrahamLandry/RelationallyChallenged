@@ -1,5 +1,5 @@
 use crate::ir::{Relation, Row, Schema, Value};
-use crate::vm::{RowsIter, StrId, Vm};
+use crate::vm::{RowsIter, Vm};
 
 impl Vm {
     pub fn print_table(&self, e: &Relation) -> String {

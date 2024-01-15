@@ -1,27 +1,46 @@
 
 ## TODO
 
-- (gt, lt, and, or, not) in filter predicate 
-- intersection
+- (not, ne, le, ge) in filter predicate 
 - set difference 
+- set product 
+- whatever the fuck set divide is 
 - join
 - web ui
 - cli 
-- tests
-- error handing
 - pretty print ast
 - inline relations
+- test invalid input returns error not crash
+- operator precedence
+
+
+## more (Jan 15)
+
+`+-*/<> or and` are all trivial. I don't care about short-circuiting the and/or cause everything's a pure function. 
+I do end up with a lot of repetitive code passing them along my obsessive pipeline which is a bit unfortunate. 
+TODO: deal with operator precedence. 
+
+Added more error checking instead of unwraps in compile. 
+Math/cmp ops need num args, logic ops need bool args, eq can be any. 
+i disallow eq on different types. will never be true so must be a mistake. 
+TODO: can you use lt/gt on strings?
 
 ## set ops (Jan 13)
 
 Would be really nice to just put things in a hash set but float: !Hash.  
-Maybe: `if n.is_nan() { n = f64::NAN; }`  
-
+Maybe: `if n.is_nan() { n = f64::NAN; }`
 Probably no point to this but it makes me feel better about iffy hash impl for floats
 Make any nans the one official bit pattern so they match when cast to u64 and hashed.
 For that to make any since need manual eq too since nan!=nan.
 Maybe its better to declare Num never nan and have a separate Value::Nan variant
 and just always check division (which i dont even have yet anyway)
+
+TODO: move lazy_init comments here. 
+
+For intersection at least i dont have to compute the whole second argument up front, 
+can just make the first set and filter the second based on the first. 
+
+TODO: test intersection 
 
 ## more parsing and filter (Jan 13)
 

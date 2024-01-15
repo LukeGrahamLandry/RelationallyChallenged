@@ -2,10 +2,8 @@ use crate::ir::{
     AstExpr, AstPred, AstValue, BinOp, IrExpr, IrPred, Loc, Relation, Row, Schema, TableBinOp,
     VType, Value,
 };
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::iter::from_fn;
-use std::ops::BitAnd;
 use std::rc::Rc;
 
 // TODO: you can never remove strings from the cache to reclaim memory because someone might have a StrId referencing it.
@@ -16,31 +14,34 @@ pub struct Vm {
     pub tables: HashMap<StrId, Relation>,
 }
 
+// TODO: need to include context
+pub type Res<T> = Result<T, CompErr>;
 #[derive(Debug, Clone)]
 pub enum CompErr {
-    // TODO
+    TypeMismatch(VType, VType),
+    BadFieldName(StrId, Schema),
+    SchemaMismatch(Schema, Schema),
+    BadTableName(StrId),
+    EmptyTable,
 }
-
-pub type Res<T> = Result<T, CompErr>;
 
 // TODO: maybe row should be a cow or better would be wrap the whole thing in an enum so you switch over borrowed vs owned once when creating the closure, not each row when running it
 pub struct RowsIter<'a>(pub Box<dyn Iterator<Item = Row> + 'a>);
 
 impl Vm {
-    pub fn exec_from_src(&mut self, src: &str) -> Option<RowsIter> {
-        todo!()
-    }
-
     // TODO: if i was feeling fancy, the Vm could have a pool of row vecs and impl drop to return them
     //       so you dont have to do an allocation for every row. (same for the closure boxes but that's harder to think about)
-    /// If this ever returns None, its a bug in compile() so I don't care about error messages but I don't want to unwrap and crash.
     /// The expr must have been compiled on THIS vm instance.
     #[must_use = "RowsIter is lazy and must be polled."]
-    pub fn eval<'a>(&'a self, expr: &'a IrExpr) -> Option<RowsIter<'a>> {
-        Some(match expr {
-            IrExpr::GetNamedTable(name) => self.tables.get(name)?.iter(),
+    pub fn eval<'a>(&'a self, expr: &'a IrExpr) -> RowsIter<'a> {
+        match expr {
+            IrExpr::GetNamedTable(name) => self
+                .tables
+                .get(name)
+                .expect("ICE: eval(GetNamedTable)")
+                .iter(),
             IrExpr::TakeFields(prev, fields) => {
-                let prev = self.eval(prev)?;
+                let prev = self.eval(prev);
                 RowsIter::new(prev.0.map(|row| Row {
                     // TODO: could filter and reorder the existing vec?
                     values: fields.iter().map(|i| row.values[i.0]).collect(),
@@ -48,12 +49,12 @@ impl Vm {
             }
             IrExpr::Filter(prev, pred) => {
                 let pred = self.eval_pred(pred);
-                let prev = self.eval(prev)?;
-                RowsIter::new(prev.0.filter(move |row| pred(row).as_bool().unwrap()))
+                let prev = self.eval(prev);
+                RowsIter::new(prev.0.filter(move |row| pred(row).as_bool()))
             }
             IrExpr::Bin { op, lhs, rhs } => {
-                let lhs = self.eval(lhs)?;
-                let rhs = self.eval(rhs)?;
+                let lhs = self.eval(lhs);
+                let rhs = self.eval(rhs);
                 match op {
                     TableBinOp::Union => RowsIter::new(lazy_init(move || {
                         // TODO: sad day that i have to allocate the whole thing but idk how else you'd do this
@@ -70,7 +71,7 @@ impl Vm {
                     })),
                 }
             }
-        })
+        }
     }
 
     fn eval_pred<'a>(&self, pred: &'a IrPred) -> Box<dyn Fn(&Row) -> Value + 'a> {
@@ -80,45 +81,71 @@ impl Vm {
             IrPred::Bin(op, lhs, rhs) => {
                 let lhs = self.eval_pred(lhs);
                 let rhs = self.eval_pred(rhs);
+                // the Value.as___() methods crash on type error but compile_impure would have caught it first.
                 match op {
+                    // TODO: this handles nans wrong
                     BinOp::Eq => Box::new(move |row| Value::Bool(lhs(row) == rhs(row))),
+                    BinOp::Or => {
+                        Box::new(move |row| Value::Bool(lhs(row).as_bool() || rhs(row).as_bool()))
+                    }
+                    BinOp::And => {
+                        Box::new(move |row| Value::Bool(lhs(row).as_bool() && rhs(row).as_bool()))
+                    }
+                    BinOp::Add => {
+                        Box::new(move |row| Value::Num(lhs(row).as_num() + rhs(row).as_num()))
+                    }
+                    BinOp::Sub => {
+                        Box::new(move |row| Value::Num(lhs(row).as_num() - rhs(row).as_num()))
+                    }
+                    BinOp::Mul => {
+                        Box::new(move |row| Value::Num(lhs(row).as_num() * rhs(row).as_num()))
+                    }
+                    // TODO: this handles nans wrong
+                    BinOp::Div => {
+                        Box::new(move |row| Value::Num(lhs(row).as_num() / rhs(row).as_num()))
+                    }
+                    BinOp::Gt => {
+                        Box::new(move |row| Value::Bool(lhs(row).as_num() > rhs(row).as_num()))
+                    }
+                    BinOp::Lt => {
+                        Box::new(move |row| Value::Bool(lhs(row).as_num() < rhs(row).as_num()))
+                    }
                 }
             }
         }
     }
 
-    // TODO: result instead of assert/unwrap
-    // TODO: infer type so you dont have to specify schema on projection
     /// Preprocess and type check an ast.
     /// The result is only valid if eval-ed on THIS vm instance. TODO: enforce with lifetime
     /// Note: CreateNamedTable runs NOW, not during eval.
-    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> (IrExpr, Schema) {
-        match expr {
+    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> Res<(IrExpr, Schema)> {
+        Ok(match expr {
             AstExpr::GetNamedTable(name) => {
                 let name = self.intern(name);
                 let schema = match self.tables.get(&name) {
-                    None => todo!("err, table not defined"),
+                    None => return Err(CompErr::BadTableName(name)),
                     Some(t) => t.schema.clone(),
                 };
                 (IrExpr::GetNamedTable(name), schema)
             }
             AstExpr::TakeFields { input, fields } => {
-                let (input, prev) = self.compile_impure(*input);
+                let (input, prev) = self.compile_impure(*input)?;
                 assert!(prev.names.len() >= fields.len());
                 let names: Vec<_> = fields.iter().map(|name| self.intern(name)).collect();
+                let types: Res<Vec<_>> = names.iter().map(|&n| prev.get_type(n)).collect();
                 let sc = Schema {
-                    types: names.iter().map(|&n| prev.get_type(n).unwrap()).collect(),
+                    types: types?,
                     names,
                 };
-                let fields = fields
+                let fields: Res<Vec<_>> = fields
                     .into_iter()
                     .map(|name| {
                         let id = self.intern(name);
-                        prev.get_index(id).expect("Field lookup")
+                        prev.get_index(id)
                     })
                     .collect();
 
-                (IrExpr::TakeFields(Box::new(input), fields), sc)
+                (IrExpr::TakeFields(Box::new(input), fields?), sc)
             }
             AstExpr::CreateNamedTable {
                 name,
@@ -126,14 +153,13 @@ impl Vm {
                 data,
             } => {
                 let name = self.intern(name);
-                // TODO: require no dups?
+                // TODO: require no dups? currently only ensuring that in set op output
                 let rows = self.load_table(data, headers.len());
-                // TODO: err if no rows
                 let schema = Schema {
                     names: headers.iter().map(|n| self.intern(n)).collect(),
                     types: rows
                         .first()
-                        .expect("some rows so can infer types")
+                        .ok_or(CompErr::EmptyTable)?
                         .values
                         .iter()
                         .map(|v| v.ty())
@@ -149,15 +175,20 @@ impl Vm {
                 (IrExpr::GetNamedTable(name), schema)
             }
             AstExpr::Filter { input, cond } => {
-                let (prev, schema) = self.compile_impure(*input);
-                let (cond, ty) = self.compile_pred(cond, &schema);
-                assert_eq!(ty, VType::Bool, "filter predicate must be bool");
+                let (prev, schema) = self.compile_impure(*input)?;
+                let (cond, ty) = self.compile_pred(cond, &schema)?;
+                if ty != VType::Bool {
+                    return Err(CompErr::TypeMismatch(ty, VType::Bool));
+                }
                 (IrExpr::Filter(Box::new(prev), cond), schema)
             }
             AstExpr::Bin { op, lhs, rhs } => {
-                let (lhs, lt) = self.compile_impure(*lhs);
-                let (rhs, rt) = self.compile_impure(*rhs);
-                // TODO: what are the rules here?
+                let (lhs, lt) = self.compile_impure(*lhs)?;
+                let (rhs, rt) = self.compile_impure(*rhs)?;
+                if lt != rt {
+                    return Err(CompErr::SchemaMismatch(lt, rt));
+                }
+                // TODO: only require same types. but which names get used?
                 assert_eq!(lt, rt);
                 let schema = lt;
                 (
@@ -169,29 +200,50 @@ impl Vm {
                     schema,
                 )
             }
-        }
+        })
     }
 
-    fn compile_pred(&mut self, expr: AstPred, schema: &Schema) -> (IrPred, VType) {
-        match expr {
+    fn compile_pred(&mut self, expr: AstPred, schema: &Schema) -> Res<(IrPred, VType)> {
+        Ok(match expr {
             AstPred::Literal(v) => {
                 let v = self.compile_value(v);
                 (IrPred::Literal(v), v.ty())
             }
             AstPred::Field(name) => {
-                let i = schema.get_index(self.intern(name)).unwrap(); // TODO
+                let name = self.intern(name);
+                let i = schema.get_index(name)?;
                 (IrPred::Field(i), schema.types[i.0])
             }
             AstPred::Bin(op, lhs, rhs) => {
-                let (l, lt) = self.compile_pred(*lhs, &schema);
-                let (r, rt) = self.compile_pred(*rhs, &schema);
-                assert_eq!(lt, rt);
-                assert_eq!(op, BinOp::Eq);
-                match op {
-                    BinOp::Eq => (IrPred::Bin(op, Box::new(l), Box::new(r)), VType::Bool),
+                let (l, lt) = self.compile_pred(*lhs, &schema)?;
+                let (r, rt) = self.compile_pred(*rhs, &schema)?;
+                if lt != rt {
+                    return Err(CompErr::TypeMismatch(lt, rt));
                 }
+                let output = match op {
+                    BinOp::Eq => VType::Bool,
+                    BinOp::Or | BinOp::And => {
+                        if lt != VType::Bool {
+                            return Err(CompErr::TypeMismatch(lt, VType::Bool));
+                        }
+                        VType::Bool
+                    }
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
+                        if lt != VType::Num {
+                            return Err(CompErr::TypeMismatch(lt, VType::Num));
+                        }
+                        VType::Num
+                    }
+                    BinOp::Gt | BinOp::Lt => {
+                        if lt != VType::Num {
+                            return Err(CompErr::TypeMismatch(lt, VType::Num));
+                        }
+                        VType::Bool
+                    }
+                };
+                (IrPred::Bin(op, Box::new(l), Box::new(r)), output)
             }
-        }
+        })
     }
 
     // TODO: schema type checking
