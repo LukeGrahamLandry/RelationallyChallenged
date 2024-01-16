@@ -69,6 +69,25 @@ impl Vm {
                         }
                         Box::new(rhs.0.filter(move |row| left.contains(&row)))
                     })),
+                    TableBinOp::Difference => RowsIter::new(lazy_init(move || {
+                        let right: HashSet<_> = rhs.0.collect();
+                        if right.is_empty() {
+                            return lhs.0; // dont remove anything
+                        }
+                        Box::new(lhs.0.filter(move |row| !right.contains(&row)))
+                    })),
+                    TableBinOp::Product => RowsIter::new(lazy_init(move || {
+                        // TODO: use size_hint, choose smaller
+                        let right: Vec<_> = rhs.0.collect();
+                        Box::new(lhs.0.flat_map(move |a| {
+                            let right = right.clone();
+                            right.into_iter().map(move |b| {
+                                let mut both = a.clone();
+                                both.values.extend(b.values.into_iter());
+                                both
+                            })
+                        }))
+                    })),
                 }
             }
         }
@@ -183,22 +202,32 @@ impl Vm {
                 (IrExpr::Filter(Box::new(prev), cond), schema)
             }
             AstExpr::Bin { op, lhs, rhs } => {
-                let (lhs, lt) = self.compile_impure(*lhs)?;
+                let (lhs, mut lt) = self.compile_impure(*lhs)?;
                 let (rhs, rt) = self.compile_impure(*rhs)?;
-                if lt != rt {
-                    return Err(CompErr::SchemaMismatch(lt, rt));
-                }
-                // TODO: only require same types. but which names get used?
-                assert_eq!(lt, rt);
-                let schema = lt;
-                (
-                    IrExpr::Bin {
-                        op,
-                        lhs: Box::new(lhs),
-                        rhs: Box::new(rhs),
-                    },
-                    schema,
-                )
+                let expr = IrExpr::Bin {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                };
+
+                let schema = match op {
+                    TableBinOp::Union | TableBinOp::Intersection | TableBinOp::Difference => {
+                        // TODO: only require same types. but which names get used?
+                        if lt != rt {
+                            return Err(CompErr::SchemaMismatch(lt, rt));
+                        }
+                        lt
+                    }
+                    TableBinOp::Product => {
+                        // This one's special, it changes the schema.
+                        // TODO: how are duplicate names dealt with? namespacing?
+                        lt.names.extend(rt.names.into_iter());
+                        lt.types.extend(rt.types.into_iter());
+                        lt
+                    }
+                };
+
+                (expr, schema)
             }
         })
     }

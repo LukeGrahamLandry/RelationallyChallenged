@@ -56,6 +56,8 @@ impl<'src> Parser<'src> {
         let op = match t.0 {
             TokenType::Union => TableBinOp::Union,
             TokenType::Intersection => TableBinOp::Intersection,
+            TokenType::Minus => TableBinOp::Difference,
+            TokenType::Product => TableBinOp::Product,
             _ => return Ok(left),
         };
         let _ = self.lex.next()?;

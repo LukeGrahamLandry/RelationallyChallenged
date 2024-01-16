@@ -108,6 +108,8 @@ pub enum BinOp {
 pub enum TableBinOp {
     Union,
     Intersection,
+    Difference,
+    Product,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

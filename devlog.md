@@ -13,8 +13,18 @@
 - test invalid input returns error not crash
 - operator precedence
 
+## more sets (Jan 16)
 
-## more (Jan 15)
+For set difference op, relax takes `∖` or `-` or `except`, so I just map all those to the minus token. 
+which is a bit weird cause then you can use all those for scalar subtraction too. 
+eh, its not ambiguous so its probably fine. 
+
+for set product, fully evaluate A, and then for each in B, produce |A| variations. 
+TODO: what schema to use is interesting. currently just appending B's names&types to A's 
+but how are duplicate names dealt with? there's the namespacing thing but what if you product something with itself? 
+Need to try out some examples in relax at some point. 
+
+## more math (Jan 15)
 
 `+-*/<> or and` are all trivial. I don't care about short-circuiting the and/or cause everything's a pure function. 
 I do end up with a lot of repetitive code passing them along my obsessive pipeline which is a bit unfortunate. 
