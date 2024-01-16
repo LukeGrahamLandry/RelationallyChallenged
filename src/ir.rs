@@ -75,6 +75,12 @@ pub enum AstExpr<'src> {
         lhs: Box<Loc<Self>>,
         rhs: Box<Loc<Self>>,
     },
+    Join {
+        // bools = is that side open
+        lhs: (Box<Loc<Self>>, bool),
+        rhs: (Box<Loc<Self>>, bool),
+        cond: AstPred<'src>,
+    },
 }
 
 #[derive(Debug, Copy, Clone)]

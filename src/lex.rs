@@ -37,6 +37,7 @@ pub enum TokenType<'a> {
     And,
     Or,
     Product,
+    Hourglass(bool, bool), // payload = is that side open
 }
 
 pub type Res<T> = Result<T, LexErr>;
@@ -108,6 +109,10 @@ impl<'a> Lexer<'a> {
             '<' => self.one(LeftTriangle),
             '>' => self.one(RightTriangle),
             '⨯' => self.one(Product),
+            '⨝' => self.one(Hourglass(false, false)),
+            '⟕' => self.one(Hourglass(true, false)),
+            '⟖' => self.one(Hourglass(false, true)),
+            '⟗' => self.one(Hourglass(true, true)),
             c => Err(LexErr::Unexpected(c)),
         }
     }
@@ -206,7 +211,7 @@ impl<'a> Lexer<'a> {
         match self.chars.next() {
             None => Err(LexErr::EOF),
             Some(c) => {
-                self.current += 1;
+                self.current += c.len_utf8();
                 Ok(c)
             }
         }

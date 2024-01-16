@@ -137,7 +137,7 @@ impl Vm {
     /// Preprocess and type check an ast.
     /// The result is only valid if eval-ed on THIS vm instance. TODO: enforce with lifetime
     /// Note: CreateNamedTable runs NOW, not during eval.
-    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> Res<(IrExpr, Schema)> {
+    pub fn compile_impure(&mut self, (expr, loc): Loc<AstExpr>) -> Res<(IrExpr, Schema)> {
         Ok(match expr {
             AstExpr::GetNamedTable(name) => {
                 let name = self.intern(name);
@@ -228,6 +228,22 @@ impl Vm {
                 };
 
                 (expr, schema)
+            }
+            AstExpr::Join {
+                lhs: (lhs, left_open),
+                rhs: (rhs, right_open),
+                cond,
+            } => {
+                let product = AstExpr::Bin {
+                    op: TableBinOp::Product,
+                    lhs,
+                    rhs,
+                };
+                let filter = AstExpr::Filter {
+                    input: Box::new((product, loc.clone())),
+                    cond,
+                };
+                self.compile_impure((filter, loc))?
             }
         })
     }

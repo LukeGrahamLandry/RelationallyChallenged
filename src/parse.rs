@@ -58,6 +58,20 @@ impl<'src> Parser<'src> {
             TokenType::Intersection => TableBinOp::Intersection,
             TokenType::Minus => TableBinOp::Difference,
             TokenType::Product => TableBinOp::Product,
+            TokenType::Hourglass(left_open, right_open) => {
+                let _ = self.lex.next()?;
+                let cond = self.pred()?;
+                let right = self.parse_table_un()?;
+                let loc = self.pop_loc()?;
+                return Ok((
+                    AstExpr::Join {
+                        cond,
+                        lhs: (Box::new(left), left_open),
+                        rhs: (Box::new(right), right_open),
+                    },
+                    loc,
+                ));
+            }
             _ => return Ok(left),
         };
         let _ = self.lex.next()?;

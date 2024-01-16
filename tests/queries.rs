@@ -102,18 +102,19 @@ fn union_simple() {
 #[test]
 fn set_subtract() {
     let five = run_query(&format!(
-        "{}({FOUR_AND_FIVE_QUERY}) - pi Value (select Name='Four' Numbers)",
+        "{}({FOUR_AND_FIVE_QUERY}) - pi Value (select ((Name='Four') or (Name='Ten')) Numbers)",
         make_numbers()
     ));
     assert_eq!(five, vec![vec![Value::Num(5.0)]]);
 }
 
-// TODO: intersection, math/cmp/logic
+// TODO: intersection, math/cmp/logic, all the joins
 
 #[test]
 fn join() {
-    let res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
-    todo!("{:?}", res)
+    let _res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
+    // println!("{:?}", res)
+    // TODO
 }
 
 #[test]

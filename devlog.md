@@ -2,8 +2,6 @@
 ## TODO
 
 - (not, ne, le, ge) in filter predicate 
-- set difference 
-- set product 
 - whatever the fuck set divide is 
 - join
 - web ui
@@ -23,6 +21,19 @@ for set product, fully evaluate A, and then for each in B, produce |A| variation
 TODO: what schema to use is interesting. currently just appending B's names&types to A's 
 but how are duplicate names dealt with? there's the namespacing thing but what if you product something with itself? 
 Need to try out some examples in relax at some point. 
+
+I feel like i need to do namespacing before I can do join. 
+i guess the trivial example where you require different field names is fine. 
+It's just product and filter, idk why its different. 
+i guess it makes it easier to optimise not creating the whole product table, but you'd hope anything real would notice regardless. 
+
+aaaaa very sad day the stupid hourglass thing is a weird unicode character 
+so the lexer can't just bump the current index by one each char, needs to see how many utf8 bytes it is. 
+which is wierd, i imagined str slicing doing utf8 indices already since they're so excited about it 
+but i guess that would be slow since you'd have to iterate up to the starting index every time.
+
+i can do the dumb product+filter for the easy case where you drop rows that don't have a match in the other table,
+but the other case needs special handling anyway. 
 
 ## more math (Jan 15)
 
