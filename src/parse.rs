@@ -234,3 +234,16 @@ impl<'a> From<LexErr> for ParseErr<'a> {
         ParseErr::Lex(value)
     }
 }
+
+impl<'a> ParseErr<'a> {
+    // TODO: spans for lex + eof
+    pub fn get_span(&self) -> Option<Range<usize>> {
+        match self {
+            ParseErr::WantFound(_, t) | ParseErr::WantVal(t) | ParseErr::WantExpr(t) => {
+                Some(t.1.clone())
+            }
+            ParseErr::Lex(_) => None,
+            ParseErr::EOF => None,
+        }
+    }
+}

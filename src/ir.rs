@@ -22,6 +22,12 @@ pub struct Schema {
     pub types: Vec<VType>,
 }
 
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub struct FieldName {
+    parent: Option<StrId>,
+    name: StrId,
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Value {
     Num(f64),

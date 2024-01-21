@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+    <title>Relationally Challenged</title>
+    <style>
+        a { color: rgb(0, 204, 255); }
+        ul { margin-top: 0 }
+        body { background-color: grey; }
+    </style>
+</head>
+<body>
+<b> COMP 3005 Relational Algebra Interpreter </b>
+<ul>
+    <li> Same syntax as <a href="https://dbis-uibk.github.io/relax/help">relaX</a> </li>
+    <li> No operator precedence, always use brackets around queries and expressions. </li>
+    <li> Supported Queries: <code> project select product union intersect except </code></li>
+    <li> Supported Expressions: <code>= > < + - * / AND OR</code> </li>
+</ul>
+<noscript> Your browser No JavaScript </noscript>
+<div id="ui" hidden>
+    <!-- TODO: select from examples so easier to test -->
+    <b>Input query here:</b> <br>
+    <textarea id="query" rows="5" style="width:100%"></textarea><br>
+    <button id="runquery"> Run Query </button>
+    <span id="msg"></span> <br> <br>
+    <select id="queries"></select>
+    <button id="show_ast">Show Ast</button>
+    <button id="show_ir">Show Ir</button>
+    <button id="show_result">Show Result</button> <br>
+    <pre id="result"></pre>
+</div>
+<script type="module">
+    let Rust = null;
+    const query = document.getElementById("query");
+    const result = document.getElementById("result");
+    const msg = document.getElementById("msg");
+    const runquery = document.getElementById("runquery");
+    const ui = document.getElementById("ui");
+    const queries_select = document.getElementById("queries");
+    const SEP = "~~~|||@@@|||~~~";
+    let current_results = [];
+    let selected_result = 0;
+    let current_key = "result";
+
+    async function handle_wasm_loaded(wasm) {
+        console.log("Wasm Loaded", wasm.instance.exports)
+        Rust = wasm.instance.exports;
+        ui.hidden = false;
+        runquery.addEventListener("click", () => {
+            run_query(query.value);
+        });
+
+        for (const n of ["ast", "ir", "result"]) {
+            document.getElementById("show_" + n).addEventListener("click", () => show_part(n));
+        }
+        queries_select.addEventListener("change", (e) => {
+            let index = e.target.value.split(" ").pop();
+            selected_result = parseInt(index);
+            show_part(current_key);
+        })
+
+        query.value = EXAMPLE;
+        run_query(EXAMPLE);
+    }
+
+    function run_query(input_query) {
+        let src = put_wasm_string(input_query);
+        const startTime = performance.now();
+        let raw_res;
+        try {
+            raw_res = Rust.run_query(src.ptr, src.len);
+        } catch (e) {
+            msg.innerText = "Compiler crashed... that really shouldn't happen!"
+            result.innerText = e.stack;
+            Rust.drop_c_str(src.ptr);
+            return;
+        }
+        let ms = (performance.now() - startTime).toFixed(2);
+        Rust.drop_c_str(src.ptr);
+        current_results = parse_response(get_wasm_string(raw_res, Rust.c_str_len(raw_res)));
+        queries_select.innerHTML = "";
+        for (let i=0;i<current_results.length-1;i++) {
+            queries_select.innerHTML += `<option id="${i}"> Query Part ${i} </option>`;
+        }
+        let i = current_results.length-1;
+        queries_select.innerHTML += `<option id="${i}" selected> Query Part ${i} </option>`;
+        selected_result = current_results.length - 1;
+        show_part(current_key);
+        Rust.drop_c_str(raw_res);
+        msg.innerText = `Parse + Eval + Report finished in ${ms}ms`;
+    }
+
+    function parse_response(res_str) {
+        const results = [];
+        const parts = res_str.split(SEP).reverse();
+        console.log(parts);
+        while (parts.length > 0 && parts[parts.length-1] !== "") {
+            let ast = "ERR";
+            let ir = "ERR";
+            let result = "ERR";
+
+            let tag = parts.pop();
+            if (tag === "ok") {
+                ast = parts.pop();
+                let tag = parts.pop();
+                if (tag === "ok") {
+                    ir = parts.pop();
+                    result = parts.pop();
+                } else if (tag === "err") {
+                    ir = result = parts.pop();
+                } else {
+                    alert("Unexpected Tag" + tag);
+                    return [];
+                }
+            } else if (tag === "err") {
+                ast = ir = result = parts.pop();
+            } else {
+                alert("Unexpected Tag" + tag);
+                return [];
+            }
+            results.push({ ast:ast, ir:ir, result:result })
+        }
+        console.log(results);
+        return results
+    }
+
+    function show_part(key) {
+        if (selected_result >= current_results.length) {
+            result.innerText = "Invalid Index " + selected_result;
+            return;
+        }
+        result.innerText = current_results[selected_result][key];
+        current_key = key;
+    }
+
+    const callbacks = { env: {} }
+    if (typeof WebAssembly === "object" && WebAssembly.instantiateStreaming !== undefined) {
+        WebAssembly.instantiateStreaming(fetch("target/wasm32-unknown-unknown/release/relations.wasm"), callbacks).then(handle_wasm_loaded);
+    } else {
+        alert("Your Browser No Wasm")
+    }
+
+    const de = new TextDecoder();
+    const en = new TextEncoder();
+    function get_wasm_string(ptr, len) {
+        const buffer = new Uint8Array(Rust.memory.buffer, ptr, len);
+        return de.decode(buffer);
+    }
+    function put_wasm_string(str) {
+        let buf = en.encode(str);
+        let ptr = Rust.alloc_str(buf.length + 1);
+        const buffer = new Uint8Array(Rust.memory.buffer, ptr, buf.length + 1);
+        buffer.set(buf, 0);
+        buffer[buf.length] = 0;
+        return { ptr: ptr, len: buf.length };
+    }
+
+    const EXAMPLE = `
+    Student = {
+id, name, email
+1, 'Alex', 'alex@carleton.ca'
+2, 'John', 'john@carleton.ca'
+3, 'Mo', 'mo@carleton.ca'
+}
+
+Course = {
+name, hours
+'Math', 3
+'Pythics', 2
+'Network', 3
+}
+
+takes = {
+sid, cname
+1, 'Math'
+1, 'Pythics'
+1, 'Network'
+2, 'Network'
+3, 'Math'
+}
+
+(Student) inner_join id=sid (takes)
+`;
+    // TODO: fancy unicode in html file dies? ^^
+</script>
+</body>
+</html>

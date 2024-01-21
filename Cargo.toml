@@ -7,4 +7,9 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]  # cdylib to call wasm from js for demo
 
 [dependencies]
+# nothing...
 
+
+[profile.release]
+strip = true
+lto = true

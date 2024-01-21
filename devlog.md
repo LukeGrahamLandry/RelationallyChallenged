@@ -3,13 +3,16 @@
 
 - (not, ne, le, ge) in filter predicate 
 - whatever the fuck set divide is 
-- join
-- web ui
+- join ("Inner join required to receive a mark. However, other types will push your mark towards 5")
 - cli 
-- pretty print ast
 - inline relations
 - test invalid input returns error not crash
 - operator precedence
+- use null as nan, so it propagates in math
+
+## web (Jan 21)
+
+
 
 ## more sets (Jan 16)
 
@@ -31,6 +34,7 @@ aaaaa very sad day the stupid hourglass thing is a weird unicode character
 so the lexer can't just bump the current index by one each char, needs to see how many utf8 bytes it is. 
 which is wierd, i imagined str slicing doing utf8 indices already since they're so excited about it 
 but i guess that would be slow since you'd have to iterate up to the starting index every time.
+- https://doc.rust-lang.org/book/ch08-02-strings.html#slicing-strings
 
 i can do the dumb product+filter for the easy case where you drop rows that don't have a match in the other table,
 but the other case needs special handling anyway. 

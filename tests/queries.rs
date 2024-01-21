@@ -111,10 +111,13 @@ fn set_subtract() {
 // TODO: intersection, math/cmp/logic, all the joins
 
 #[test]
-fn join() {
-    let _res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
-    // println!("{:?}", res)
-    // TODO
+fn inner_join() {
+    let res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
+    assert_eq!(res.len(), 5);
+    assert_eq!(res.iter().filter(|row| row[0] == row[3]).count(), res.len());
+    assert_eq!(res.iter().filter(|row| row[0].as_num() == 1.0).count(), 3);
+    assert_eq!(res.iter().filter(|row| row[0].as_num() == 2.0).count(), 1);
+    assert_eq!(res.iter().filter(|row| row[0].as_num() == 3.0).count(), 1);
 }
 
 #[test]

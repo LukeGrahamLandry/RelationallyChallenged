@@ -38,6 +38,7 @@ pub enum TokenType<'a> {
     Or,
     Product,
     Hourglass(bool, bool), // payload = is that side open
+    Dot,                   // Note: 5.5 is parsed as (Number), NOT (Number, Dot, Number)
 }
 
 pub type Res<T> = Result<T, LexErr>;
@@ -113,6 +114,7 @@ impl<'a> Lexer<'a> {
             '⟕' => self.one(Hourglass(true, false)),
             '⟖' => self.one(Hourglass(false, true)),
             '⟗' => self.one(Hourglass(true, true)),
+            '.' => self.one(Dot),
             c => Err(LexErr::Unexpected(c)),
         }
     }
@@ -179,6 +181,7 @@ impl<'a> Lexer<'a> {
             "or" | "OR" => Or,
             "except" => Minus,
             "product" => Product,
+            "inner_join" => Hourglass(false, false),
             text => Ident(text),
         };
         Ok(Token(ty, token.1))
