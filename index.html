@@ -11,16 +11,18 @@
 <body>
 <b> COMP 3005 Relational Algebra Interpreter </b>
 <ul>
-    <li> Same syntax as <a href="https://dbis-uibk.github.io/relax/help">relaX</a> </li>
+    <li> (Almost) same syntax as <a href="https://dbis-uibk.github.io/relax/help">relaX</a> </li>
     <li> No operator precedence, always use brackets around queries and expressions. </li>
     <li> Supported Queries: <code> project select product union intersect except </code></li>
     <li> Supported Expressions: <code>= > < + - * / AND OR</code> </li>
+    <li> Parser + db/interpreter is ~1k lines of Rust with no dependencies (other than standard library). </li>
 </ul>
 <noscript> Your browser No JavaScript </noscript>
+<div id="loading">Loading wasm...</div>
 <div id="ui" hidden>
     <!-- TODO: select from examples so easier to test -->
     <b>Input query here:</b> <br>
-    <textarea id="query" rows="5" style="width:100%"></textarea><br>
+    <textarea id="query" rows="10" style="width:100%"></textarea><br>
     <button id="runquery"> Run Query </button>
     <span id="msg"></span> <br> <br>
     <select id="queries"></select>
@@ -43,6 +45,7 @@
     let current_key = "result";
 
     async function handle_wasm_loaded(wasm) {
+        document.getElementById("loading").hidden = true;
         console.log("Wasm Loaded", wasm.instance.exports)
         Rust = wasm.instance.exports;
         ui.hidden = false;
@@ -64,6 +67,10 @@
     }
 
     function run_query(input_query) {
+        if (input_query.includes(SEP)) {
+            alert("input may not contain my magic string: " + SEP)
+            return;
+        }
         let src = put_wasm_string(input_query);
         const startTime = performance.now();
         let raw_res;
@@ -77,7 +84,9 @@
         }
         let ms = (performance.now() - startTime).toFixed(2);
         Rust.drop_c_str(src.ptr);
-        current_results = parse_response(get_wasm_string(raw_res, Rust.c_str_len(raw_res)));
+        let res = get_wasm_string(raw_res, Rust.c_str_len(raw_res));
+        Rust.drop_c_str(raw_res);
+        current_results = parse_response(res);
         queries_select.innerHTML = "";
         for (let i=0;i<current_results.length-1;i++) {
             queries_select.innerHTML += `<option id="${i}"> Query Part ${i} </option>`;
@@ -86,14 +95,12 @@
         queries_select.innerHTML += `<option id="${i}" selected> Query Part ${i} </option>`;
         selected_result = current_results.length - 1;
         show_part(current_key);
-        Rust.drop_c_str(raw_res);
-        msg.innerText = `Parse + Eval + Report finished in ${ms}ms`;
+        msg.innerText = `Parse + Eval finished in ${ms}ms`;
     }
 
     function parse_response(res_str) {
         const results = [];
         const parts = res_str.split(SEP).reverse();
-        console.log(parts);
         while (parts.length > 0 && parts[parts.length-1] !== "") {
             let ast = "ERR";
             let ir = "ERR";
@@ -120,7 +127,6 @@
             }
             results.push({ ast:ast, ir:ir, result:result })
         }
-        console.log(results);
         return results
     }
 
@@ -156,7 +162,7 @@
     }
 
     const EXAMPLE = `
-    Student = {
+Student = {
 id, name, email
 1, 'Alex', 'alex@carleton.ca'
 2, 'John', 'john@carleton.ca'

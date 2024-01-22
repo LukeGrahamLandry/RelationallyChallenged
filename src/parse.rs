@@ -2,6 +2,7 @@
 
 use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc, TableBinOp};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
+use crate::vm::CompErr;
 use std::ops::Range;
 
 pub struct Parser<'src> {
@@ -16,6 +17,7 @@ pub enum ParseErr<'a> {
     WantExpr(Token<'a>),
     Lex(LexErr),
     EOF,
+    WantTable(Token<'a>),
 }
 
 type Res<'a, T> = Result<T, ParseErr<'a>>;
@@ -110,7 +112,7 @@ impl<'src> Parser<'src> {
                 Ok(expr)
             }
             TokenType::EOF => Err(ParseErr::EOF),
-            _ => todo!("err"),
+            _ => Err(ParseErr::WantTable(t)),
         }
     }
 
@@ -121,7 +123,7 @@ impl<'src> Parser<'src> {
             TokenType::Equals => BinOp::Eq,
             TokenType::Or => BinOp::Or,
             TokenType::And => BinOp::And,
-            TokenType::Plus => BinOp::And,
+            TokenType::Plus => BinOp::Add,
             TokenType::Minus => BinOp::Sub,
             TokenType::Star => BinOp::Mul,
             TokenType::Slash => BinOp::Div,
@@ -164,14 +166,13 @@ impl<'src> Parser<'src> {
     }
 
     fn ident_list(&mut self) -> Res<'src, Vec<&'src str>> {
-        Ok(self
-            .comma_sep()?
+        self.comma_sep()?
             .into_iter()
             .map(|t| match t.0 {
-                TokenType::Ident(s) => s,
-                _ => todo!("err, header wanted ident"),
+                TokenType::Ident(s) => Ok(s),
+                _ => Err(ParseErr::WantFound(TokenType::Ident("<any>"), t)),
             })
-            .collect())
+            .collect() // Note: only returns first error
     }
 
     fn parse_rows(&mut self, width: usize) -> Res<'src, Vec<Vec<AstValue<'src>>>> {
@@ -239,9 +240,10 @@ impl<'a> ParseErr<'a> {
     // TODO: spans for lex + eof
     pub fn get_span(&self) -> Option<Range<usize>> {
         match self {
-            ParseErr::WantFound(_, t) | ParseErr::WantVal(t) | ParseErr::WantExpr(t) => {
-                Some(t.1.clone())
-            }
+            ParseErr::WantFound(_, t)
+            | ParseErr::WantVal(t)
+            | ParseErr::WantExpr(t)
+            | ParseErr::WantTable(t) => Some(t.1.clone()),
             ParseErr::Lex(_) => None,
             ParseErr::EOF => None,
         }

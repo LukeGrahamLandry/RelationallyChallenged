@@ -1,6 +1,5 @@
-use crate::ir::{AstExpr, Relation, Row, Schema, Value};
+use crate::ir::{Relation, Row, Schema, Value};
 use crate::vm::{RowsIter, Vm};
-use std::fmt::{Display, Formatter};
 
 impl Vm {
     pub fn print_table(&self, e: &Relation) -> String {
@@ -51,7 +50,7 @@ impl Vm {
             Value::Num(n) => format!("{n}"),
             &Value::Str(s) => format!("\"{}\"", self.get_str(s)),
             Value::Bool(b) => format!("{b}"),
-            Value::Nan => format!("NaN"),
+            Value::Null => format!("NaN"),
         }
     }
 }

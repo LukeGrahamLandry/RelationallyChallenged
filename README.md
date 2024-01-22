@@ -1,5 +1,7 @@
 # COMP 3005 Challenge: relational algebra interpreter
 
+- [Try it online!](https://lukegrahamlandry.ca/relalg/)
+
 ## Language
 
 It's a subset of the syntax of relaX. See `tests` folder for examples. 

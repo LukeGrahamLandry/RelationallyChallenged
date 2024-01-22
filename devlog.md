@@ -8,11 +8,27 @@
 - inline relations
 - test invalid input returns error not crash
 - operator precedence
-- use null as nan, so it propagates in math
+- benchmark against relax
+- null literal (then type check from first non-null)
+- optional type annotations 
+
+## more joins (Jan 22)
+
+- nan check everywhere and make nulls propagate in math
+- added error check for ambiguous field name lookup (hit by join test with lecture example). TODO: namespacing 
+- replaced a few lazy todos with error returns in parser
+- wrote a little benchmark against relax (im slightly faster :)) but its dumb cause im pretty sure most of the time is parsing anyway
+
+TODO: include ast in type check error
 
 ## web (Jan 21)
 
-
+Want to be able to display ast/ir/result separately but returning structs from wasm functions is a massive pain cause you 
+need to make getters for everything (or do pointer math i guess). 
+Instead, doing super ugly massive string with a magic separator (some garbage characters that are unlikely to come up) 
+that js splits on to parse out the chunks. 
+TODO: safer would be json or just start string with offsets of split points, maybe. 
+or even just check if the SEP is in the input.  
 
 ## more sets (Jan 16)
 

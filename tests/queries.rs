@@ -59,14 +59,6 @@ sid, cname
 }
 "#;
 
-// TODO: not on ^. its just an example from bright space
-// TODO: supporting this needs some concept of namespaces across tables
-const _STUDENT_QUERY: &str = r#"
-π name, title, mark (
-      (Student ⨝Student.id=Takes.sidTakes)
-      ⨝ cid=Course.id Course
-)"#;
-
 const SELECT_FOUR: &str = "pi Square (select Name='Four' (pi Square, Name (Numbers)))";
 
 // Use with make_numbers()
@@ -82,6 +74,20 @@ union
     select Name='Four' (Numbers)
 )
 )
+"#;
+
+const JOBS: &str = r#"
+Employee = { id, name, email, Dept
+1, "Alex", "a@c", "Sales"
+2, "John", "j@c", "Finance"
+3, "Mo", "m@c", "HR"
+}
+
+Department = { dname, budget
+"Finance", 20000
+"Sales", 30000
+"IT", 40000
+}
 "#;
 
 #[test]
@@ -111,13 +117,24 @@ fn set_subtract() {
 // TODO: intersection, math/cmp/logic, all the joins
 
 #[test]
-fn inner_join() {
+fn inner_join_school() {
     let res = run_query(&format!("{SCHOOL_TABLE_2}(Student) ⨝ id=sid (takes)"));
     assert_eq!(res.len(), 5);
     assert_eq!(res.iter().filter(|row| row[0] == row[3]).count(), res.len());
     assert_eq!(res.iter().filter(|row| row[0].as_num() == 1.0).count(), 3);
     assert_eq!(res.iter().filter(|row| row[0].as_num() == 2.0).count(), 1);
     assert_eq!(res.iter().filter(|row| row[0].as_num() == 3.0).count(), 1);
+    assert_eq!(count_nulls(&res), 0);
+}
+
+// TODO: support namespacing so can make JOBS:Department:"dname" back to "name" for all the join tests below
+
+#[test]
+fn inner_join() {
+    // TODO: fix parser so dont need
+    let res = run_query(&format!("{JOBS} (Employee) ⨝Dept=dname (Department)"));
+    assert_eq!(res.len(), 2);
+    assert_eq!(count_nulls(&res), 0);
 }
 
 #[test]
@@ -125,6 +142,7 @@ fn lex() {
     lex_span_sanity(&make_numbers(), 0);
     lex_span_sanity(EMPLOYEES_TABLE, 0);
     lex_span_sanity(SCHOOL_TABLE, 5);
+    lex_span_sanity(SCHOOL_TABLE_2, 0);
 }
 
 // If there's no whitespace in quoted strings and no comments,
@@ -167,4 +185,10 @@ fn run_query(src: &str) -> Vec<Vec<Value>> {
     let q = q.unwrap();
     let res = vm.eval(&q);
     res.0.map(|r| r.values).collect()
+}
+
+fn count_nulls(rows: &[Vec<Value>]) -> usize {
+    rows.iter()
+        .map(|row| row.iter().filter(|v| matches!(v, Value::Null)).count())
+        .sum()
 }

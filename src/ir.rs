@@ -33,7 +33,7 @@ pub enum Value {
     Num(f64),
     Str(StrId),
     Bool(bool),
-    Nan,
+    Null, // or NaN
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -48,6 +48,12 @@ pub enum IrExpr {
         op: TableBinOp,
         lhs: Box<Self>,
         rhs: Box<Self>,
+    },
+    Join {
+        // bools = is that side open
+        lhs: (Box<Self>, bool),
+        rhs: (Box<Self>, bool),
+        cond: IrPred,
     },
 }
 
@@ -136,6 +142,11 @@ pub type Loc<T> = (T, Range<usize>); // TODO: range not actually used yet.
 
 impl Schema {
     pub fn get_index(&self, id: StrId) -> vm::Res<FieldId> {
+        // TODO: this check wont be required once i support name spacing (but should still be done when declaring a table)
+        if self.names.iter().filter(|&&check| check == id).count() > 1 {
+            return Err(CompErr::AmbiguousFieldName(id, self.clone()));
+        }
+
         self.names
             .iter()
             .position(|&check| check == id)
@@ -157,9 +168,10 @@ impl Relation {
 }
 
 impl Value {
+    // TODO: null is kinda any type? idk
     pub fn ty(&self) -> VType {
         match self {
-            Value::Num(_) | Value::Nan => VType::Num,
+            Value::Num(_) | Value::Null => VType::Num,
             Value::Str(_) => VType::Str,
             Value::Bool(_) => VType::Bool,
         }
@@ -168,6 +180,7 @@ impl Value {
     pub fn as_bool(&self) -> bool {
         match self {
             &Value::Bool(b) => b,
+            Value::Null => false,
             _ => panic!("expect bool but {self:?}"),
         }
     }
@@ -175,7 +188,7 @@ impl Value {
     pub fn as_num(&self) -> f64 {
         match self {
             &Value::Num(n) => n,
-            Value::Nan => f64::NAN,
+            Value::Null => f64::NAN,
             _ => panic!("expect num but {self:?}"),
         }
     }
@@ -186,6 +199,7 @@ impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Value::Num(n) => {
+                debug_assert!(!n.is_nan());
                 state.write_i64(30197513748900);
                 state.write_u64(n.to_bits());
             }
@@ -195,7 +209,7 @@ impl Hash for Value {
             }
             Value::Bool(true) => state.write_i64(78219104210329751),
             Value::Bool(false) => state.write_i64(1831294217),
-            Value::Nan => state.write_i64(8210726170476),
+            Value::Null => state.write_i64(8210726170476),
         }
     }
 }
@@ -203,3 +217,13 @@ impl Hash for Value {
 // Can't derive because f64: !Eq because NaN!=NaN,
 // but as long as I always carefully represent those with Value::Nan, then its fine.
 impl Eq for Value {}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        if value.is_nan() {
+            Value::Null
+        } else {
+            Value::Num(value)
+        }
+    }
+}

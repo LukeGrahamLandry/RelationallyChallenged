@@ -23,6 +23,7 @@ pub enum CompErr {
     SchemaMismatch(Schema, Schema),
     BadTableName(StrId),
     EmptyTable,
+    AmbiguousFieldName(StrId, Schema),
 }
 
 // TODO: maybe row should be a cow or better would be wrap the whole thing in an enum so you switch over borrowed vs owned once when creating the closure, not each row when running it
@@ -90,6 +91,13 @@ impl Vm {
                     })),
                 }
             }
+            IrExpr::Join {
+                lhs: (lhs, left_open),
+                rhs: (rhs, right_open),
+                cond,
+            } => {
+                todo!()
+            }
         }
     }
 
@@ -111,17 +119,16 @@ impl Vm {
                         Box::new(move |row| Value::Bool(lhs(row).as_bool() && rhs(row).as_bool()))
                     }
                     BinOp::Add => {
-                        Box::new(move |row| Value::Num(lhs(row).as_num() + rhs(row).as_num()))
+                        Box::new(move |row| (lhs(row).as_num() + rhs(row).as_num()).into())
                     }
                     BinOp::Sub => {
-                        Box::new(move |row| Value::Num(lhs(row).as_num() - rhs(row).as_num()))
+                        Box::new(move |row| (lhs(row).as_num() - rhs(row).as_num()).into())
                     }
                     BinOp::Mul => {
-                        Box::new(move |row| Value::Num(lhs(row).as_num() * rhs(row).as_num()))
+                        Box::new(move |row| (lhs(row).as_num() * rhs(row).as_num()).into())
                     }
-                    // TODO: this handles nans wrong
                     BinOp::Div => {
-                        Box::new(move |row| Value::Num(lhs(row).as_num() / rhs(row).as_num()))
+                        Box::new(move |row| (lhs(row).as_num() / rhs(row).as_num()).into())
                     }
                     BinOp::Gt => {
                         Box::new(move |row| Value::Bool(lhs(row).as_num() > rhs(row).as_num()))
@@ -229,11 +236,13 @@ impl Vm {
 
                 (expr, schema)
             }
+            // TODO: cond on AstExpr should become optional and infer compare key with same name here so its always there on IrExpr
             AstExpr::Join {
                 lhs: (lhs, left_open),
                 rhs: (rhs, right_open),
                 cond,
             } => {
+                assert!((!right_open) && (!left_open));
                 let product = AstExpr::Bin {
                     op: TableBinOp::Product,
                     lhs,
@@ -308,13 +317,7 @@ impl Vm {
 
     fn compile_value(&mut self, value: AstValue) -> Value {
         match value {
-            AstValue::Num(n) => {
-                if n.is_nan() {
-                    Value::Nan
-                } else {
-                    Value::Num(n)
-                }
-            }
+            AstValue::Num(n) => n.into(),
             AstValue::Str(s) => Value::Str(self.intern(s)),
             AstValue::Bool(b) => Value::Bool(b),
         }
