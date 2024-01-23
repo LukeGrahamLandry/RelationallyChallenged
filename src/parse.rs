@@ -2,7 +2,6 @@
 
 use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc, TableBinOp};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
-use crate::vm::CompErr;
 use std::ops::Range;
 
 pub struct Parser<'src> {

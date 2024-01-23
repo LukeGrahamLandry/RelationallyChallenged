@@ -24,6 +24,7 @@ pub enum CompErr {
     BadTableName(StrId),
     EmptyTable,
     AmbiguousFieldName(StrId, Schema),
+    FieldCountWantFound(usize, usize),
 }
 
 // TODO: maybe row should be a cow or better would be wrap the whole thing in an enum so you switch over borrowed vs owned once when creating the closure, not each row when running it
@@ -92,12 +93,155 @@ impl Vm {
                 }
             }
             IrExpr::Join {
-                lhs: (lhs, left_open),
-                rhs: (rhs, right_open),
+                lhs,
+                rhs,
                 cond,
-            } => {
-                todo!()
-            }
+                result_len,
+            } => self.eval_join(lhs, rhs, cond, result_len),
+        }
+    }
+
+    // TODO: adsajdklaskjdnkwjalsdnlaaa idc this is the most horrible copy-paste for now but i just need to see the pattern
+    pub fn eval_join<'a>(
+        &'a self,
+        (lhs, left_open): &'a (Box<IrExpr>, bool),
+        (rhs, right_open): &'a (Box<IrExpr>, bool),
+        cond: &'a IrPred,
+        result_len: &'a usize,
+    ) -> RowsIter<'a> {
+        let lhs = self.eval(lhs);
+        let rhs = self.eval(rhs);
+
+        match (*left_open, *right_open) {
+            // Inner: Happy case. Only include rows that have a match.
+            (false, false) => RowsIter::new(lazy_init(move || {
+                let right: Vec<_> = rhs.0.collect();
+                Box::new(lhs.0.flat_map(move |a| {
+                    let cond = self.eval_pred(cond); // TODO: only call this once!
+                    let right = right.clone();
+                    right.into_iter().filter_map(move |b| {
+                        let mut both = a.clone();
+                        both.values.extend(b.values.into_iter());
+                        if cond(&both).as_bool() {
+                            Some(both)
+                        } else {
+                            None
+                        }
+                    })
+                }))
+            })),
+            // Left is open so allow nulls on the right. Everything on the left must be in the output.
+            (true, false) => RowsIter::new(lazy_init(move || {
+                let right: Vec<_> = rhs.0.collect();
+                Box::new(lhs.0.flat_map(move |a| {
+                    let cond = self.eval_pred(cond); // TODO: only call this once!
+                    let right = right.clone();
+                    let mut original = a.clone();
+                    let results: Vec<_> = right
+                        .into_iter()
+                        .filter_map(move |b| {
+                            let mut both = a.clone();
+                            both.values.extend(b.values.into_iter());
+                            if cond(&both).as_bool() {
+                                Some(both)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    if results.is_empty() {
+                        while original.values.len() < *result_len {
+                            original.values.push(Value::Null);
+                        }
+                        vec![original].into_iter()
+                    } else {
+                        results.into_iter()
+                    }
+                }))
+            })),
+            // Same as above but swap left and right.  TODO: cringe copy-paste
+            (false, true) => RowsIter::new(lazy_init(move || {
+                let left: Vec<_> = lhs.0.collect();
+                Box::new(rhs.0.flat_map(move |b| {
+                    let cond = self.eval_pred(cond); // TODO: only call this once!
+                    let left = left.clone();
+                    let mut original = b.clone();
+                    let results: Vec<_> = left
+                        .into_iter()
+                        .filter_map(move |a| {
+                            let b = b.clone();
+                            let mut both = a.clone();
+                            both.values.extend(b.values.into_iter());
+                            if cond(&both).as_bool() {
+                                Some(both)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    if results.is_empty() {
+                        while original.values.len() < *result_len {
+                            original.values.insert(0, Value::Null); // cri
+                        }
+                        vec![original].into_iter()
+                    } else {
+                        results.into_iter()
+                    }
+                }))
+            })),
+            // Full outer: Most permissive so needs more work. Set operation where anything not taken from right needs its own row.
+            // its intersection of left and right outer join but doing it that way would be a bunch of duplicate work.
+            (true, true) => RowsIter::new(lazy_init(move || {
+                let mut left: Vec<_> = lhs.0.collect();
+                let right: Vec<_> = rhs.0.collect();
+                let mut right_remaining: HashSet<_> = right.iter().cloned().collect();
+
+                let mut results: Vec<_> = left
+                    .iter()
+                    .flat_map(|a| {
+                        // let cond = self.eval_pred(cond); // TODO: only call this once!
+                        let right = right.clone();
+                        let mut original = a.clone();
+                        let results: Vec<_> = right
+                            .into_iter()
+                            .filter_map(|b| {
+                                let cond = self.eval_pred(cond);
+                                let mut both = a.clone();
+                                both.values.extend(b.values.clone().into_iter());
+                                if cond(&both).as_bool() {
+                                    right_remaining.remove(&b);
+                                    Some(both)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+
+                        if results.is_empty() {
+                            while original.values.len() < *result_len {
+                                original.values.push(Value::Null);
+                            }
+                            vec![original].into_iter()
+                        } else {
+                            results.into_iter()
+                        }
+                    })
+                    .collect();
+
+                // Now everything from the left is in results and right_remaining has everything on the right that wasn't matched yet.
+                Box::new(
+                    results
+                        .into_iter()
+                        .chain(right_remaining.into_iter().map(|mut b| {
+                            while b.values.len() < *result_len {
+                                b.values.insert(0, Value::Null); // cri
+                            }
+                            b
+                        })),
+                )
+            })),
         }
     }
 
@@ -141,10 +285,11 @@ impl Vm {
         }
     }
 
+    // TODO: include loc in errors
     /// Preprocess and type check an ast.
     /// The result is only valid if eval-ed on THIS vm instance. TODO: enforce with lifetime
     /// Note: CreateNamedTable runs NOW, not during eval.
-    pub fn compile_impure(&mut self, (expr, loc): Loc<AstExpr>) -> Res<(IrExpr, Schema)> {
+    pub fn compile_impure(&mut self, (expr, _): Loc<AstExpr>) -> Res<(IrExpr, Schema)> {
         Ok(match expr {
             AstExpr::GetNamedTable(name) => {
                 let name = self.intern(name);
@@ -180,7 +325,7 @@ impl Vm {
             } => {
                 let name = self.intern(name);
                 // TODO: require no dups? currently only ensuring that in set op output
-                let rows = self.load_table(data, headers.len());
+                let rows = self.load_table(data, headers.len())?;
                 let schema = Schema {
                     names: headers.iter().map(|n| self.intern(n)).collect(),
                     types: rows
@@ -242,17 +387,24 @@ impl Vm {
                 rhs: (rhs, right_open),
                 cond,
             } => {
-                assert!((!right_open) && (!left_open));
-                let product = AstExpr::Bin {
-                    op: TableBinOp::Product,
-                    lhs,
-                    rhs,
-                };
-                let filter = AstExpr::Filter {
-                    input: Box::new((product, loc.clone())),
-                    cond,
-                };
-                self.compile_impure((filter, loc))?
+                // TODO: annoying-ly copy-paste-ish but this is the only binary that also needs a condition
+                let (lhs, mut lt) = self.compile_impure(*lhs)?;
+                let (rhs, rt) = self.compile_impure(*rhs)?;
+                lt.names.extend(rt.names.into_iter());
+                lt.types.extend(rt.types.into_iter());
+                let (cond, cty) = self.compile_pred(cond, &lt)?;
+                if cty != VType::Bool {
+                    return Err(CompErr::TypeMismatch(cty, VType::Bool));
+                }
+                (
+                    IrExpr::Join {
+                        lhs: (Box::new(lhs), left_open),
+                        rhs: (Box::new(rhs), right_open),
+                        cond,
+                        result_len: lt.names.len(),
+                    },
+                    lt,
+                )
             }
         })
     }
@@ -301,16 +453,18 @@ impl Vm {
     }
 
     // TODO: schema type checking
-    fn load_table(&mut self, data: Vec<Vec<AstValue>>, count: usize) -> Vec<Row> {
+    fn load_table(&mut self, data: Vec<Vec<AstValue>>, count: usize) -> Res<Vec<Row>> {
         data.into_iter()
             .map(|row| {
-                assert_eq!(count, row.len()); // TODO: result
-                Row {
+                if count != row.len() {
+                    return Err(CompErr::FieldCountWantFound(count, row.len()));
+                }
+                Ok(Row {
                     values: row
                         .into_iter()
                         .map(|value| self.compile_value(value))
                         .collect(),
-                }
+                })
             })
             .collect()
     }

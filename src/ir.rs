@@ -54,6 +54,7 @@ pub enum IrExpr {
         lhs: (Box<Self>, bool),
         rhs: (Box<Self>, bool),
         cond: IrPred,
+        result_len: usize, // Needed for filling in nulls
     },
 }
 

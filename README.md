@@ -1,6 +1,7 @@
 # COMP 3005 Challenge: relational algebra interpreter
 
 - [Try it online!](https://lukegrahamlandry.ca/relalg/)
+- Building from source requires installing [the Rust Compiler](https://www.rust-lang.org/tools/install) and the wasm32-unknown-unknown toolchain. 
 
 ## Language
 
@@ -35,10 +36,3 @@ IrExpr: has references into intern pool & field names resolved to indices
 lazy stream of rows
 [user]
 ```
-
-## Build
-
-- [Install the Rust Compiler](https://www.rust-lang.org/tools/install)
-- `cargo test`
-- `cargo build --release`
-- `target/release/relations`

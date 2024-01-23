@@ -3,16 +3,28 @@
 
 - (not, ne, le, ge) in filter predicate 
 - whatever the fuck set divide is 
-- join ("Inner join required to receive a mark. However, other types will push your mark towards 5")
 - cli 
 - inline relations
 - test invalid input returns error not crash
 - operator precedence
-- benchmark against relax
 - null literal (then type check from first non-null)
 - optional type annotations 
 
-## more joins (Jan 22)
+## more joins (Jan 23)
+
+If im just going to match over the openness flags, it should be an enum. 
+Going to start with the something terrible and hopefully see a pattern that makes it less painful.
+Could see inner as intersection of left-right-outer and full-outer as union of left-right-outer which gets 
+rid of some horrible code duplication but means doing redundant work which seems sad. 
+
+What's supposed to happen if there's multiple that match the join condition? Currently, it just gives you multiple rows. 
+That's what relax does too, so I guess it's fine. 
+
+TODO: Once again reminded: Maybe should remove the extra closure wrapping and just have eval poll the iterator. 
+      First try to think of a query where there's a branch you don't end up evaluating. Feels like It's impossible. 
+
+
+## bench (Jan 22)
 
 - nan check everywhere and make nulls propagate in math
 - added error check for ambiguous field name lookup (hit by join test with lecture example). TODO: namespacing 

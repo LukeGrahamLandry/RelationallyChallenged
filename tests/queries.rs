@@ -131,10 +131,31 @@ fn inner_join_school() {
 
 #[test]
 fn inner_join() {
-    // TODO: fix parser so dont need
+    // TODO: fix parser so dont need brackets
     let res = run_query(&format!("{JOBS} (Employee) ⨝Dept=dname (Department)"));
     assert_eq!(res.len(), 2);
     assert_eq!(count_nulls(&res), 0);
+}
+
+#[test]
+fn left_outer_join() {
+    let res = run_query(&format!("{JOBS} (Employee) ⟕Dept=dname (Department)"));
+    assert_eq!(res.len(), 3);
+    assert_eq!(count_nulls(&res), 2);
+}
+
+#[test]
+fn right_outer_join() {
+    let res = run_query(&format!("{JOBS} (Employee) ⟖Dept=dname (Department)"));
+    assert_eq!(res.len(), 3);
+    assert_eq!(count_nulls(&res), 4);
+}
+
+#[test]
+fn full_outer_join() {
+    let res = run_query(&format!("{JOBS} (Employee) ⟗Dept=dname (Department)"));
+    assert_eq!(res.len(), 4);
+    assert_eq!(count_nulls(&res), 6);
 }
 
 #[test]
