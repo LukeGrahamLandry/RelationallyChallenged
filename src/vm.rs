@@ -136,7 +136,7 @@ impl Vm {
                 Box::new(lhs.0.flat_map(move |a| {
                     let cond = self.eval_pred(cond); // TODO: only call this once!
                     let right = right.clone();
-                    let mut original = a.clone();
+                    let original = a.clone();
                     let results: Vec<_> = right
                         .into_iter()
                         .filter_map(move |b| {
@@ -150,14 +150,7 @@ impl Vm {
                         })
                         .collect();
 
-                    if results.is_empty() {
-                        while original.values.len() < *result_len {
-                            original.values.push(Value::Null);
-                        }
-                        vec![original].into_iter()
-                    } else {
-                        results.into_iter()
-                    }
+                    Vm::pad_right(results, original, *result_len)
                 }))
             })),
             // Same as above but swap left and right.  TODO: cringe copy-paste
@@ -194,16 +187,16 @@ impl Vm {
             // Full outer: Most permissive so needs more work. Set operation where anything not taken from right needs its own row.
             // its intersection of left and right outer join but doing it that way would be a bunch of duplicate work.
             (true, true) => RowsIter::new(lazy_init(move || {
-                let mut left: Vec<_> = lhs.0.collect();
+                let left: Vec<_> = lhs.0.collect();
                 let right: Vec<_> = rhs.0.collect();
                 let mut right_remaining: HashSet<_> = right.iter().cloned().collect();
 
-                let mut results: Vec<_> = left
+                let results: Vec<_> = left
                     .iter()
                     .flat_map(|a| {
                         // let cond = self.eval_pred(cond); // TODO: only call this once!
                         let right = right.clone();
-                        let mut original = a.clone();
+                        let original = a.clone();
                         let results: Vec<_> = right
                             .into_iter()
                             .filter_map(|b| {
@@ -219,14 +212,7 @@ impl Vm {
                             })
                             .collect();
 
-                        if results.is_empty() {
-                            while original.values.len() < *result_len {
-                                original.values.push(Value::Null);
-                            }
-                            vec![original].into_iter()
-                        } else {
-                            results.into_iter()
-                        }
+                        Vm::pad_right(results, original, *result_len)
                     })
                     .collect();
 
@@ -282,6 +268,21 @@ impl Vm {
                     }
                 }
             }
+        }
+    }
+
+    fn pad_right(
+        results: Vec<Row>,
+        mut original: Row,
+        result_len: usize,
+    ) -> impl Iterator<Item = Row> {
+        if results.is_empty() {
+            while original.values.len() < result_len {
+                original.values.push(Value::Null);
+            }
+            vec![original].into_iter()
+        } else {
+            results.into_iter()
         }
     }
 

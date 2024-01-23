@@ -2,13 +2,14 @@
 ## TODO
 
 - (not, ne, le, ge) in filter predicate 
-- whatever the fuck set divide is 
-- cli 
+- set divide
+- nicer rust abi wrapper for lib::web::run_query to clean up repl
 - inline relations
 - test invalid input returns error not crash
 - operator precedence
 - null literal (then type check from first non-null)
 - optional type annotations 
+- both runners keep going after compile error so most recent error shown won't be the useful one 
 
 ## more joins (Jan 23)
 

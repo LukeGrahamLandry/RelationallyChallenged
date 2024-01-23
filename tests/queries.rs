@@ -158,6 +158,24 @@ fn full_outer_join() {
     assert_eq!(count_nulls(&res), 6);
 }
 
+// Same behaviour as relax
+#[test]
+fn join_multiple_matches() {
+    const Q: &str = r#"A = { a, b
+1, 3
+2, 4
+}
+
+C = { c, d
+1, 5
+1, 6
+}
+(A) ⨝a=c (C)"#;
+    let res = run_query(Q);
+    assert_eq!(res.len(), 2);
+    assert_eq!(count_nulls(&res), 0);
+}
+
 #[test]
 fn lex() {
     lex_span_sanity(&make_numbers(), 0);
