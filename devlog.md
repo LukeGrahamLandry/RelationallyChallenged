@@ -11,7 +11,11 @@
 - optional type annotations 
 - both runners keep going after compile error so most recent error shown won't be the useful one 
 - support the non-relax syntax from bright-space 
-- natural join (need namespacing first)
+- natural join 
+- check relax name qualifier in filter product (comment on consistency in readme)
+- stricter join tests
+- nice way for tests to output answers as strings so can assert correctness even when using StrId
+- hitting eof during parsing should be treated as a real error if it's not at the very beginning
 
 ## a1 (Jan 24)
 
@@ -19,6 +23,9 @@ Want to use assignment 1 as a test. Need to support namespacing since DeptID is 
 Start with easy add to just the backend, throw in an optional parent, so you don't need to specify the table name when there's only one option. 
 Then parsing, also fairly trivial, just check for a dot after an ident when expecting a field (pi & exprs). 
 Alas dumb mistake caused by parse.lex.next and parse.next having the same name and my awkward lookahead parsing.   
+
+In trying to do some of a1, discovered relax's handling of namespacing seems different from lecture 2 examples? 
+
 
 ## more joins (Jan 23)
 

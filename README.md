@@ -1,25 +1,17 @@
 # COMP 3005 Challenge: relational algebra interpreter
 
+- Luke Graham Landry 101226905
 - [Try it online!](https://lukegrahamlandry.ca/relalg/)
 - Building from source requires installing [the Rust Compiler](https://www.rust-lang.org/tools/install) and the wasm32-unknown-unknown toolchain. 
 
 ## Language
 
-It's a subset of the syntax of relaX. See `tests` folder for examples. 
-
-```
-Root => (Stmt)*
-Stmt => '(' Stmt ')' | Ident | Select Expr Stmt | Pi Fields Stmt | Table | Stmt TBinOp Stmt
-TBinOp => 'union'
-Table => Ident '{' Fields Rows '}'
-Fields => (Ident ',')* Ident
-Rows => ((Value ',')* Value)*
-Expr => '(' Expr ')' | Value | Expr ValBinOp Expr
-Value => quoted_string | number | Ident
-ValBinOp => '='
-Pi => 'pi' | 'Π' | 'π'
-Select => 'select' | 'sigma' | 'σ'
-```
+- See `tests` folder for examples.
+- It's mostly a subset of the syntax of relaX. Same weird symbols and sane word alternatives. 
+- Join requires 
+- Join follows the semantics of the examples in lecture 2 slides instead of relax. 
+So you can use table names as qualifiers in join conditions and two columns with the same name (but different qualifiers) appear in the result. 
+Similarly, product with duplicate names is allowed if table names can disambiguate.
 
 ## Architecture 
 

@@ -1,7 +1,7 @@
-use relations::ir::Value;
+use relations::ir::{Row, Value};
 use relations::lex::{Lexer, Token, TokenType};
 use relations::parse::{ParseErr, Parser};
-use relations::vm::Vm;
+use relations::vm::{RowsIter, Vm};
 
 fn make_numbers() -> String {
     let rows: String = [
@@ -114,7 +114,7 @@ fn set_subtract() {
     assert_eq!(five, vec![vec![Value::Num(5.0)]]);
 }
 
-// TODO: intersection, math/cmp/logic, all the joins
+// TODO: intersection, math/cmp/logic
 
 #[test]
 fn inner_join_school() {
@@ -135,12 +135,19 @@ fn inner_join() {
     ));
     assert_eq!(res.len(), 2);
     assert_eq!(count_nulls(&res), 0);
+
+    // Manual
+    // Relax can't do this. "Error: join would result in non unique column names name"
+    let res2 = run_query(&format!(
+        "{JOBS} sigma Employee.Dept=Department.name ((Employee) ⨯ (Department))"
+    ));
+    assert_eq!(res, res2);
 }
 
 #[test]
 fn left_outer_join() {
     let res = run_query(&format!(
-        "{JOBS} (Employee) ⟕Dept=Department.name (Department)"
+        "{JOBS} (Employee) ⟕Employee.Dept=Department.name (Department)"
     ));
     assert_eq!(res.len(), 3);
     assert_eq!(count_nulls(&res), 2);
@@ -180,6 +187,34 @@ C = { c, d
     let res = run_query(Q);
     assert_eq!(res.len(), 2);
     assert_eq!(count_nulls(&res), 0);
+}
+
+#[test]
+fn natural_join() {
+    const Q: &str = r#"B = { a, b
+1, 3
+2, 4
+}
+
+C = { a, c
+1, 5
+}"#;
+    let with_cond = run_query(&format!("{Q} (B) ⨝ (B.a=C.a) (C)"));
+    assert_eq!(with_cond.len(), 1);
+    assert_eq!(count_nulls(&with_cond), 0);
+    assert_eq!(with_cond[0].len(), 4);
+
+    let less_brackets = run_query(&format!("{Q} (B) ⨝ B.a=C.a (C)"));
+    assert_eq!(less_brackets.len(), 1);
+    assert_eq!(count_nulls(&less_brackets), 0);
+    assert_eq!(less_brackets[0].len(), 4);
+
+    // TODO
+    // let no_cond = run_query(&format!("{Q} (B) ⨝ (C)"));
+    // println!("{:?}", no_cond);
+    // assert_eq!(no_cond.len(), 1);
+    // assert_eq!(count_nulls(&no_cond), 0);
+    // assert_eq!(no_cond[0].len(), 4);
 }
 
 #[test]
@@ -230,6 +265,7 @@ fn lex_span_sanity(src: &str, hack_quoted_whitespace: usize) {
 // returns result of last query
 // any before are just compiled for side effects (ie. setup named tables)
 fn run_query(src: &str) -> Vec<Vec<Value>> {
+    println!("\n\nINPUT: \n=========\n{}\n==========", src);
     let mut vm = Vm::default();
     let mut parse = Parser::new(Lexer::new(src));
     let mut next = parse.next();
@@ -244,7 +280,14 @@ fn run_query(src: &str) -> Vec<Vec<Value>> {
     }
     let q = q.unwrap();
     let res = vm.eval(&q);
-    res.0.map(|r| r.values).collect()
+    let results: Vec<_> = res.0.map(|r| r.values).collect();
+
+    let for_demo = vm.print_rows_iter(RowsIter(Box::new(
+        results.clone().into_iter().map(|values| Row { values }),
+    )));
+    println!("\n\nOUTPUT:\n============\n{for_demo}\n=========");
+
+    results
 }
 
 fn count_nulls(rows: &[Vec<Value>]) -> usize {
