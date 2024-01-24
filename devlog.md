@@ -15,6 +15,11 @@
 
 ## a1 (Jan 24)
 
+Want to use assignment 1 as a test. Need to support namespacing since DeptID is ambiguous. 
+Start with easy add to just the backend, throw in an optional parent, so you don't need to specify the table name when there's only one option. 
+Then parsing, also fairly trivial, just check for a dot after an ident when expecting a field (pi & exprs). 
+Alas dumb mistake caused by parse.lex.next and parse.next having the same name and my awkward lookahead parsing.   
+
 ## more joins (Jan 23)
 
 If im just going to match over the openness flags, it should be an enum. 

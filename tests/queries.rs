@@ -83,7 +83,7 @@ Employee = { id, name, email, Dept
 3, "Mo", "m@c", "HR"
 }
 
-Department = { dname, budget
+Department = { name, budget
 "Finance", 20000
 "Sales", 30000
 "IT", 40000
@@ -127,33 +127,39 @@ fn inner_join_school() {
     assert_eq!(count_nulls(&res), 0);
 }
 
-// TODO: support namespacing so can make JOBS:Department:"dname" back to "name" for all the join tests below
-
 #[test]
 fn inner_join() {
     // TODO: fix parser so dont need brackets
-    let res = run_query(&format!("{JOBS} (Employee) ⨝Dept=dname (Department)"));
+    let res = run_query(&format!(
+        "{JOBS} (Employee) ⨝Dept=Department.name (Department)"
+    ));
     assert_eq!(res.len(), 2);
     assert_eq!(count_nulls(&res), 0);
 }
 
 #[test]
 fn left_outer_join() {
-    let res = run_query(&format!("{JOBS} (Employee) ⟕Dept=dname (Department)"));
+    let res = run_query(&format!(
+        "{JOBS} (Employee) ⟕Dept=Department.name (Department)"
+    ));
     assert_eq!(res.len(), 3);
     assert_eq!(count_nulls(&res), 2);
 }
 
 #[test]
 fn right_outer_join() {
-    let res = run_query(&format!("{JOBS} (Employee) ⟖Dept=dname (Department)"));
+    let res = run_query(&format!(
+        "{JOBS} (Employee) ⟖Dept=Department.name (Department)"
+    ));
     assert_eq!(res.len(), 3);
     assert_eq!(count_nulls(&res), 4);
 }
 
 #[test]
 fn full_outer_join() {
-    let res = run_query(&format!("{JOBS} (Employee) ⟗Dept=dname (Department)"));
+    let res = run_query(&format!(
+        "{JOBS} (Employee) ⟗Dept=Department.name (Department)"
+    ));
     assert_eq!(res.len(), 4);
     assert_eq!(count_nulls(&res), 6);
 }

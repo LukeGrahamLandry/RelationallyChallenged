@@ -140,7 +140,7 @@ impl<'src> Parser<'src> {
     fn pred_primary(&mut self) -> Res<'src, AstPred<'src>> {
         let t = self.lex.next()?;
         match t.0 {
-            TokenType::Ident(name) => Ok(AstPred::Field((name, None))), // TODO: look for dot. this is a read of a field value so needs namespace support
+            TokenType::Ident(name) => Ok(AstPred::Field(self.field_name(name)?)), // TODO: look for dot. this is a read of a field value so needs namespace support
             TokenType::Number(n) => Ok(AstPred::Literal(AstValue::Num(n))),
             TokenType::Quoted(s) => Ok(AstPred::Literal(AstValue::Str(s))),
             TokenType::LeftParen => {
@@ -176,13 +176,29 @@ impl<'src> Parser<'src> {
     }
 
     fn field_name_list(&mut self) -> Res<'src, Vec<AstFieldName<'src>>> {
-        self.comma_sep()?
-            .into_iter()
-            .map(|t| match t.0 {
-                TokenType::Ident(s) => Ok((s, None)), // TODO: look for dot
-                _ => Err(ParseErr::WantFound(TokenType::Ident("<any>"), t)),
-            })
-            .collect() // Note: only returns first error
+        let mut fields = vec![];
+        loop {
+            let name = self.require_ident()?;
+            fields.push(self.field_name(name)?);
+
+            if self.lex.nth(0)?.0 == TokenType::Comma {
+                self.lex.next()?;
+            } else {
+                break;
+            }
+        }
+        Ok(fields)
+    }
+
+    // [Ident] (Dot) (Ident) <any> OR [Ident] <!Dot>
+    fn field_name(&mut self, first: &'src str) -> Res<'src, AstFieldName<'src>> {
+        if self.lex.nth(0)?.0 == TokenType::Dot {
+            let _ = self.lex.next()?;
+            let second = self.require_ident()?;
+            Ok((second, Some(first)))
+        } else {
+            Ok((first, None))
+        }
     }
 
     fn parse_rows(&mut self, width: usize) -> Res<'src, Vec<Vec<AstValue<'src>>>> {
@@ -219,7 +235,7 @@ impl<'src> Parser<'src> {
         Ok(())
     }
 
-    fn _require_ident(&mut self) -> Res<'src, &'src str> {
+    fn require_ident(&mut self) -> Res<'src, &'src str> {
         let found = self.lex.next()?;
         if let TokenType::Ident(v) = found.0 {
             return Ok(v);
