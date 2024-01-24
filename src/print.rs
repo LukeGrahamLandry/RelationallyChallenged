@@ -27,7 +27,7 @@ impl Vm {
         let mut s = e
             .names
             .iter()
-            .map(|&v| self.get_str(v))
+            .map(|&v| self.get_str(v.name))
             .fold(String::new(), |a, b| a + &b + ", ");
         s.pop();
         s.pop(); // comma space

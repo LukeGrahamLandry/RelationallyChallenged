@@ -181,6 +181,7 @@ impl<'a> Lexer<'a> {
             "or" | "OR" => Or,
             "except" => Minus,
             "product" => Product,
+            // TODO: words for other joins
             "inner_join" => Hourglass(false, false),
             text => Ident(text),
         };

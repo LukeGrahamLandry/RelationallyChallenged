@@ -10,6 +10,10 @@
 - null literal (then type check from first non-null)
 - optional type annotations 
 - both runners keep going after compile error so most recent error shown won't be the useful one 
+- support the non-relax syntax from bright-space 
+- natural join (need namespacing first)
+
+## a1 (Jan 24)
 
 ## more joins (Jan 23)
 
@@ -24,6 +28,7 @@ That's what relax does too, so I guess it's fine.
 TODO: Once again reminded: Maybe should remove the extra closure wrapping and just have eval poll the iterator. 
       First try to think of a query where there's a branch you don't end up evaluating. Feels like It's impossible. 
 
+added native repl. 
 
 ## bench (Jan 22)
 

@@ -13,16 +13,16 @@
 <ul>
     <li> (Almost) same syntax as <a href="https://dbis-uibk.github.io/relax/help">relaX</a> </li>
     <li> No operator precedence, always use brackets around queries and expressions. </li>
-    <li> Supported Queries: <code> project select product union intersect except </code></li>
+    <li> Supported Queries: <code> project select product union intersect except join (inner/left/right/outer) </code></li>
     <li> Supported Expressions: <code>= > < + - * / AND OR</code> </li>
-    <li> Parser + db/interpreter is ~1k lines of Rust with no dependencies (other than standard library). </li>
+    <li> ~1250 lines of Rust with no dependencies (other than standard library). </li>
 </ul>
 <noscript> Your browser No JavaScript </noscript>
 <div id="loading">Loading wasm...</div>
 <div id="ui" hidden>
     <!-- TODO: select from examples so easier to test -->
     <b>Input query here:</b> <br>
-    <textarea id="query" rows="10" style="width:100%"></textarea><br>
+    <textarea id="query" rows="15" style="width:100%"></textarea><br>
     <button id="runquery"> Run Query </button>
     <span id="msg"></span> <br> <br>
     <select id="queries"></select>

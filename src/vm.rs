@@ -1,6 +1,6 @@
 use crate::ir::{
-    AstExpr, AstPred, AstValue, BinOp, IrExpr, IrPred, Loc, Relation, Row, Schema, TableBinOp,
-    VType, Value,
+    AstExpr, AstPred, AstValue, BinOp, FieldName, IrExpr, IrPred, Loc, Relation, Row, Schema,
+    TableBinOp, VType, Value,
 };
 use std::collections::{HashMap, HashSet};
 use std::iter::from_fn;
@@ -19,11 +19,11 @@ pub type Res<T> = Result<T, CompErr>;
 #[derive(Debug, Clone)]
 pub enum CompErr {
     TypeMismatch(VType, VType),
-    BadFieldName(StrId, Schema),
+    BadFieldName(FieldName, Schema),
     SchemaMismatch(Schema, Schema),
     BadTableName(StrId),
     EmptyTable,
-    AmbiguousFieldName(StrId, Schema),
+    AmbiguousFieldName(FieldName, Schema),
     FieldCountWantFound(usize, usize),
 }
 
@@ -303,7 +303,7 @@ impl Vm {
             AstExpr::TakeFields { input, fields } => {
                 let (input, prev) = self.compile_impure(*input)?;
                 assert!(prev.names.len() >= fields.len());
-                let names: Vec<_> = fields.iter().map(|name| self.intern(name)).collect();
+                let names: Vec<_> = fields.iter().map(|n| self.intern2(n)).collect();
                 let types: Res<Vec<_>> = names.iter().map(|&n| prev.get_type(n)).collect();
                 let sc = Schema {
                     types: types?,
@@ -311,8 +311,8 @@ impl Vm {
                 };
                 let fields: Res<Vec<_>> = fields
                     .into_iter()
-                    .map(|name| {
-                        let id = self.intern(name);
+                    .map(|n| {
+                        let id = self.intern2(&n);
                         prev.get_index(id)
                     })
                     .collect();
@@ -324,11 +324,13 @@ impl Vm {
                 headers,
                 data,
             } => {
-                let name = self.intern(name);
                 // TODO: require no dups? currently only ensuring that in set op output
                 let rows = self.load_table(data, headers.len())?;
                 let schema = Schema {
-                    names: headers.iter().map(|n| self.intern(n)).collect(),
+                    names: headers
+                        .iter()
+                        .map(|n| self.intern2(&(*n, Some(name))))
+                        .collect(),
                     types: rows
                         .first()
                         .ok_or(CompErr::EmptyTable)?
@@ -337,6 +339,7 @@ impl Vm {
                         .map(|v| v.ty())
                         .collect(),
                 };
+                let name = self.intern(name);
                 let table = Relation {
                     rows,
                     name,
@@ -417,7 +420,7 @@ impl Vm {
                 (IrPred::Literal(v), v.ty())
             }
             AstPred::Field(name) => {
-                let name = self.intern(name);
+                let name = self.intern2(&name);
                 let i = schema.get_index(name)?;
                 (IrPred::Field(i), schema.types[i.0])
             }
@@ -492,6 +495,13 @@ impl Vm {
                 id
             }
             Some(&id) => id,
+        }
+    }
+
+    pub fn intern2(&mut self, (name, parent): &(&str, Option<&str>)) -> FieldName {
+        FieldName {
+            parent: parent.map(|parent| self.intern(parent)),
+            name: self.intern(name),
         }
     }
 }

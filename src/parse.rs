@@ -1,6 +1,6 @@
 //! Convert a stream of tokens to an AstExpr (or multiple)
 
-use crate::ir::{AstExpr, AstPred, AstValue, BinOp, Loc, TableBinOp};
+use crate::ir::{AstExpr, AstFieldName, AstPred, AstValue, BinOp, Loc, TableBinOp};
 use crate::lex::{LexErr, Lexer, Token, TokenType};
 use std::ops::Range;
 
@@ -32,6 +32,7 @@ impl<'src> Parser<'src> {
             TokenType::Ident(name) => {
                 self.push_loc()?;
                 self.lex.next()?;
+                // TODO: this is where to fix table ident reference without brackets
                 self.require(TokenType::Equals)?;
                 self.require(TokenType::LeftSquiggle)?;
                 let headers = self.ident_list()?;
@@ -94,7 +95,7 @@ impl<'src> Parser<'src> {
         match t.0 {
             TokenType::Ident(name) => Ok((AstExpr::GetNamedTable(name), t.1)),
             TokenType::Pi => {
-                let fields = self.ident_list()?;
+                let fields = self.field_name_list()?;
                 let input = Box::new(self.parse_table_bin()?);
                 let end = input.1.start;
                 Ok((AstExpr::TakeFields { input, fields }, t.1.start..end))
@@ -139,7 +140,7 @@ impl<'src> Parser<'src> {
     fn pred_primary(&mut self) -> Res<'src, AstPred<'src>> {
         let t = self.lex.next()?;
         match t.0 {
-            TokenType::Ident(name) => Ok(AstPred::Field(name)),
+            TokenType::Ident(name) => Ok(AstPred::Field((name, None))), // TODO: look for dot. this is a read of a field value so needs namespace support
             TokenType::Number(n) => Ok(AstPred::Literal(AstValue::Num(n))),
             TokenType::Quoted(s) => Ok(AstPred::Literal(AstValue::Str(s))),
             TokenType::LeftParen => {
@@ -169,6 +170,16 @@ impl<'src> Parser<'src> {
             .into_iter()
             .map(|t| match t.0 {
                 TokenType::Ident(s) => Ok(s),
+                _ => Err(ParseErr::WantFound(TokenType::Ident("<any>"), t)),
+            })
+            .collect() // Note: only returns first error
+    }
+
+    fn field_name_list(&mut self) -> Res<'src, Vec<AstFieldName<'src>>> {
+        self.comma_sep()?
+            .into_iter()
+            .map(|t| match t.0 {
+                TokenType::Ident(s) => Ok((s, None)), // TODO: look for dot
                 _ => Err(ParseErr::WantFound(TokenType::Ident("<any>"), t)),
             })
             .collect() // Note: only returns first error

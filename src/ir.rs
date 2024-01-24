@@ -16,16 +16,17 @@ pub struct Relation {
 pub struct Row {
     pub values: Vec<Value>,
 }
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Schema {
-    pub names: Vec<StrId>,
+    pub names: Vec<FieldName>,
     pub types: Vec<VType>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub struct FieldName {
-    parent: Option<StrId>,
-    name: StrId,
+    pub parent: Option<StrId>,
+    pub name: StrId,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -65,6 +66,8 @@ pub enum IrPred {
     Bin(BinOp, Box<Self>, Box<Self>),
 }
 
+pub type AstFieldName<'src> = (&'src str, Option<&'src str>);
+
 #[derive(Debug)]
 pub enum AstExpr<'src> {
     // TODO: this has side effects when compiled not when evaluated which probably the wrong choice.
@@ -77,7 +80,7 @@ pub enum AstExpr<'src> {
     GetNamedTable(&'src str),
     TakeFields {
         input: Box<Loc<Self>>,
-        fields: Vec<&'src str>,
+        fields: Vec<AstFieldName<'src>>,
     },
     Filter {
         input: Box<Loc<Self>>,
@@ -106,7 +109,7 @@ pub enum AstValue<'src> {
 #[derive(Debug, Clone)]
 pub enum AstPred<'src> {
     Literal(AstValue<'src>),
-    Field(&'src str),
+    Field(AstFieldName<'src>),
     Bin(BinOp, Box<Self>, Box<Self>),
 }
 
@@ -142,20 +145,26 @@ pub enum VType {
 pub type Loc<T> = (T, Range<usize>); // TODO: range not actually used yet.
 
 impl Schema {
-    pub fn get_index(&self, id: StrId) -> vm::Res<FieldId> {
-        // TODO: this check wont be required once i support name spacing (but should still be done when declaring a table)
-        if self.names.iter().filter(|&&check| check == id).count() > 1 {
+    pub fn get_index(&self, id: FieldName) -> vm::Res<FieldId> {
+        let same = |check: FieldName| match (id.parent, check.parent) {
+            (Some(id_parent), Some(check_parent)) => {
+                id_parent == check_parent && id.name == check.name
+            }
+            _ => id.name == check.name,
+        };
+
+        if self.names.iter().filter(|&&check| same(check)).count() > 1 {
             return Err(CompErr::AmbiguousFieldName(id, self.clone()));
         }
 
         self.names
             .iter()
-            .position(|&check| check == id)
+            .position(|&check| same(check))
             .map(FieldId)
             .ok_or_else(|| CompErr::BadFieldName(id, self.clone()))
     }
 
-    pub fn get_type(&self, id: StrId) -> vm::Res<VType> {
+    pub fn get_type(&self, id: FieldName) -> vm::Res<VType> {
         // unwrap cant fail if get_index didnt
         Ok(self.types.get(self.get_index(id)?.0).copied().unwrap())
     }

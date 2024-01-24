@@ -177,11 +177,26 @@ C = { c, d
 }
 
 #[test]
+fn namespacing() {
+    let old = run_query(&format!(
+        "{}\npi ProjectName (Projects)",
+        include_str!("a1.txt")
+    ));
+    assert_eq!(old.len(), 4);
+    let new = run_query(&format!(
+        "{}\npi Projects.ProjectName (Projects)",
+        include_str!("a1.txt")
+    ));
+    assert_eq!(old, new);
+}
+
+#[test]
 fn lex() {
     lex_span_sanity(&make_numbers(), 0);
     lex_span_sanity(EMPLOYEES_TABLE, 0);
     lex_span_sanity(SCHOOL_TABLE, 5);
     lex_span_sanity(SCHOOL_TABLE_2, 0);
+    lex_span_sanity(include_str!("a1.txt"), 0);
 }
 
 // If there's no whitespace in quoted strings and no comments,
